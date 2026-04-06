@@ -1,0 +1,19 @@
+{
+  "name": "kairos-core-tooling",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Repository-level tooling for hooks and commit policy",
+  "scripts": {
+    "prepare": "husky",
+    "lint:backend:bun": "node scripts/run-backend-checks.mjs lint",
+    "test:backend:bun": "node scripts/run-backend-checks.mjs test",
+    "check:backend:bun": "node scripts/run-backend-checks.mjs all",
+    "check:changelog:bun": "node scripts/check-changelog.mjs",
+    "commitlint": "commitlint"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "husky": "^9.1.7"
+  }
+}

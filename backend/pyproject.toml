@@ -1,0 +1,32 @@
+[project]
+name = "kairos-core-backend"
+version = "0.1.0"
+description = "Backend scaffold for Kairos Core"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.8.0",
+  "sqlalchemy>=2.0.0",
+  "alembic>=1.13.0",
+  "psycopg[binary]>=3.2.0",
+  "pgvector>=0.3.0",
+  "langgraph>=0.2.0",
+  "python-dotenv>=1.0.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.6.0",
+  "mypy>=1.10.0"
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

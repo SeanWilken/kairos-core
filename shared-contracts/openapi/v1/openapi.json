@@ -1,0 +1,32 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kairos Core Backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Get Health",
+        "operationId": "get_health_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Health V1 Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

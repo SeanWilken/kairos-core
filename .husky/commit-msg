@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+if command -v bunx >/dev/null 2>&1; then
+  bunx commitlint --edit "$1"
+else
+  npx --no -- commitlint --edit "$1"
+fi

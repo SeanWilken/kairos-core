@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+if command -v bun >/dev/null 2>&1; then
+  bun scripts/run-backend-checks.mjs all
+  bun scripts/check-changelog.mjs
+else
+  npm run check:backend
+  npm run check:changelog
+fi
