@@ -43,5 +43,5 @@ jobs:
 
       - name: Verify OpenAPI snapshot
         run: |
-          python backend/scripts/export_openapi.py
+          backend/.venv/bin/python backend/scripts/export_openapi.py
           git diff --exit-code shared-contracts/openapi/v1/openapi.json
