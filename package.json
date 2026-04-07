@@ -5,9 +5,13 @@
   "description": "Repository-level tooling for hooks and commit policy",
   "scripts": {
     "prepare": "husky",
+    "lint:backend": "node scripts/run-backend-checks.mjs lint",
     "lint:backend:bun": "node scripts/run-backend-checks.mjs lint",
+    "test:backend": "node scripts/run-backend-checks.mjs test",
     "test:backend:bun": "node scripts/run-backend-checks.mjs test",
+    "check:backend": "node scripts/run-backend-checks.mjs all",
     "check:backend:bun": "node scripts/run-backend-checks.mjs all",
+    "check:changelog": "node scripts/check-changelog.mjs",
     "check:changelog:bun": "node scripts/check-changelog.mjs",
     "commitlint": "commitlint"
   },

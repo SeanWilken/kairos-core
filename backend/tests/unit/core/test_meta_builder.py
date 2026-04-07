@@ -27,3 +27,4 @@ def test_build_meta_uses_request_state_correlation_id() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["correlation_id"] == "cid-test"
+    assert body["spec_version"] == "v1"

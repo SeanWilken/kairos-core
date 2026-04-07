@@ -12,6 +12,7 @@ def build_meta(request: Request) -> Meta:
     return Meta(
         service=settings.app_name,
         version=settings.app_version,
+        spec_version="v1",
         environment=settings.app_env,
         timestamp=datetime.now(timezone.utc).isoformat(),
         correlation_id=getattr(request.state, "correlation_id", "unknown"),
