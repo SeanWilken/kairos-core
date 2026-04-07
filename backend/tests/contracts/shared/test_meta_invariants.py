@@ -15,6 +15,7 @@ def test_meta_is_present_on_success_and_error() -> None:
     for body in [success, missing]:
         assert isinstance(body["meta"]["service"], str)
         assert isinstance(body["meta"]["version"], str)
+        assert body["meta"]["spec_version"] == "v1"
         assert isinstance(body["meta"]["environment"], str)
         assert isinstance(body["meta"]["timestamp"], str)
         assert isinstance(body["meta"]["correlation_id"], str)

@@ -8,6 +8,7 @@ T = TypeVar("T")
 class Meta(BaseModel):
     service: str
     version: str
+    spec_version: str
     environment: str
     timestamp: str
     correlation_id: str

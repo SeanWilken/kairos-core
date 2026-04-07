@@ -30,8 +30,9 @@ jobs:
 
       - name: Install backend dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e "./backend[dev]"
+          python -m venv backend/.venv
+          backend/.venv/bin/python -m pip install --upgrade pip
+          backend/.venv/bin/python -m pip install -e "./backend[dev]"
 
       - name: Run backend checks
         run: bun run check:backend
@@ -42,5 +43,5 @@ jobs:
 
       - name: Verify OpenAPI snapshot
         run: |
-          python backend/scripts/export_openapi.py
+          backend/.venv/bin/python backend/scripts/export_openapi.py
           git diff --exit-code shared-contracts/openapi/v1/openapi.json

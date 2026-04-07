@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-
-from app.main import app
-
+import sys
 
 def main() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    if str(backend_root) not in sys.path:
+        sys.path.insert(0, str(backend_root))
+
+    from app.main import app  # local import avoids E402
+
     root = Path(__file__).resolve().parents[2]
     target = root / "shared-contracts" / "openapi" / "v1"
     target.mkdir(parents=True, exist_ok=True)
@@ -17,7 +21,6 @@ def main() -> None:
         f.write("\n")
 
     print(f"Wrote OpenAPI spec to {output_file}")
-
 
 if __name__ == "__main__":
     main()

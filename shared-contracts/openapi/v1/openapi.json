@@ -27,6 +27,29 @@
           }
         }
       }
+    },
+    "/v1/protected/ping": {
+      "get": {
+        "tags": [
+          "protected"
+        ],
+        "summary": "Get Protected",
+        "operationId": "get_protected_v1_protected_ping_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Protected V1 Protected Ping Get"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }
