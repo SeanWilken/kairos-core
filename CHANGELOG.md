@@ -18,6 +18,7 @@ The format is based on Keep a Changelog.
 - Added AI safety and prompt-injection posture notes for user-facing integrations.
 - Rebranded project naming to Kairos Core across backend/frontend/tooling and ecosystem docs.
 - Fixed CI OpenAPI export execution by resolving backend module path and running export with backend virtual environment Python.
+- .gitattributes added for json eol=lf 
 
 ## [PR 1 - Governance Baseline]
 
