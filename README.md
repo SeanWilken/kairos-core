@@ -126,6 +126,13 @@ See service-specific setup:
 - Runtime docs: `/docs` and `/openapi.json`
 - Envelope contract in place (`meta`, `data`, `error`)
 
+## Setup wizard visuals
+
+Frontend setup wizard screenshots for each major step are tracked in:
+
+- `frontend/README.md`
+- `docs/images/`
+
 ## OSS baseline docs
 
 - `LICENSE`

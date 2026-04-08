@@ -20,6 +20,18 @@ The format is based on Keep a Changelog.
 - Fixed CI OpenAPI export execution by resolving backend module path and running export with backend virtual environment Python.
 - .gitattributes added for json eol=lf 
 - Added bootstrap target capability schemas and a core setup wizard capability matrix with execution-mode gating and experimental target disclaimers.
+- Added a Studio-aligned frontend shell and routing scaffold for Kairos Core setup flows.
+- Added a modularized setup wizard architecture (`types`, `constants`, `helpers`, shared `common`, per-step components) to replace the monolithic prototype.
+- Reordered setup flow to runtime -> deployment -> secrets -> vector -> preflight -> artifacts -> runtime verify + docs -> review, with required gating between phases.
+- Added runtime verification checks and locked document bootstrap behind successful required runtime checks.
+- Added expanded artifact generation templates for `.env.template`, `docker-compose.yml`, optional `nginx.conf`, target-specific snippets, and `bootstrap-report.json`.
+- Added shell placeholders for `Backups`, `Retrain`, and `Recovery` sections plus admin utility menu entries.
+- Added frontend style pipeline (`index.css`, `tailwind.css`, `theme.css`) and Vite React dedupe/alias configuration for shared UI integration.
+- Fixed dropdown trigger ref warnings by replacing `DropdownMenuTrigger asChild` usage with native `button` triggers in the shell header.
+- Added `lucide-react` frontend dependency and excluded legacy `src/wizard-test.tsx` from TypeScript compile inputs.
+- Added Tailwind source scanning for `@kairosstack/ui` package classes in frontend styling configuration.
+- Added frontend overlay style overrides for select/dropdown content layering, opacity, option spacing, and trigger-width alignment.
+- Updated frontend README with current setup notes and full-step setup wizard screenshots.
 
 ## [PR 1 - Governance Baseline]
 

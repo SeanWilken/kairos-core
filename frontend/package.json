@@ -10,17 +10,22 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@kairosstack/ui": "^0.1.0-alpha.1",
     "@tanstack/react-query": "^5.51.0",
+    "lucide-react": "^0.539.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.1.12",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "eslint": "^9.9.0",
+    "tailwindcss": "^4.1.12",
     "typescript": "^5.5.4",
+    "tw-animate-css": "^1.3.8",
     "vite": "^5.4.0"
   }
 }
