@@ -20,7 +20,7 @@ This folder contains the React + TypeScript reference UI for the core training s
 
 1. Install dependencies from `package.json`.
 2. Start dev server.
-3. Configure API base URL via environment variables.
+3. Open the local Vite URL and use the core setup wizard.
 
 ## Command reference
 
@@ -29,4 +29,5 @@ npm install
 npm run dev
 ```
 
-No feature code has been created yet by design.
+The current scaffold includes a bootstrap setup wizard (`src/kairos-core-setup.jsx`) for
+runtime/deployment artifact generation.

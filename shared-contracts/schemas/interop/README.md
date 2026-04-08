@@ -12,3 +12,8 @@ Expected schema groups:
 - task contract payloads
 - artifact output payloads
 - quality gate payloads
+
+Current bootstrap-focused schemas (v0.1):
+
+- `v0.1/bootstrap-target-capabilities.schema.json`
+- `v0.1/bootstrap-capability-matrix.schema.json`

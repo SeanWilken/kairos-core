@@ -19,6 +19,7 @@ The format is based on Keep a Changelog.
 - Rebranded project naming to Kairos Core across backend/frontend/tooling and ecosystem docs.
 - Fixed CI OpenAPI export execution by resolving backend module path and running export with backend virtual environment Python.
 - .gitattributes added for json eol=lf 
+- Added bootstrap target capability schemas and a core setup wizard capability matrix with execution-mode gating and experimental target disclaimers.
 
 ## [PR 1 - Governance Baseline]
 
