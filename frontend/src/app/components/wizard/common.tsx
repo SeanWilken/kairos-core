@@ -2,24 +2,70 @@ import { useState } from "react";
 import { CheckCircle2, ChevronRight, Circle } from "lucide-react";
 import { Button, Input, Progress, cn } from "@kairosstack/ui";
 
-import { STEP_DEFS } from "./constants";
+type SidebarStep = {
+  id: number;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
 
-export function StepSidebar({ current, completed }: { current: number; completed: Set<number> }) {
+export function StepSidebar({
+  current,
+  completed,
+  steps,
+  mode,
+  onModeChange,
+}: {
+  current: number;
+  completed: Set<number>;
+  steps: SidebarStep[];
+  mode: "bootstrap" | "runtime";
+  onModeChange: (mode: "bootstrap" | "runtime") => void;
+}) {
+  const completedCount = steps.filter((s) => completed.has(s.id)).length;
+  const progress = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
+
   return (
     <div className="w-56 lg:w-60 flex-shrink-0 border-r border-zinc-200 bg-white overflow-y-auto">
       <div className="p-5 border-b border-zinc-200">
-        <h2 className="text-sm font-semibold text-zinc-900">Environment Setup</h2>
-        <p className="text-xs text-zinc-500 mt-0.5">Configure your core runtime</p>
+        <h2 className="text-sm font-semibold text-zinc-900">{mode === "bootstrap" ? "Environment Setup" : "Runtime Wizard"}</h2>
+        <p className="text-xs text-zinc-500 mt-0.5">
+          {mode === "bootstrap" ? "Configure and bootstrap your core runtime" : "Validate and use an existing runtime"}
+        </p>
+
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-md border border-zinc-200 p-1 bg-zinc-50">
+          <button
+            type="button"
+            onClick={() => onModeChange("bootstrap")}
+            className={cn(
+              "text-[11px] font-semibold rounded px-2 py-1 transition-colors",
+              mode === "bootstrap" ? "bg-white text-zinc-900 border border-zinc-200" : "text-zinc-500 hover:text-zinc-700"
+            )}
+          >
+            setup
+          </button>
+          <button
+            type="button"
+            onClick={() => onModeChange("runtime")}
+            className={cn(
+              "text-[11px] font-semibold rounded px-2 py-1 transition-colors",
+              mode === "runtime" ? "bg-white text-zinc-900 border border-zinc-200" : "text-zinc-500 hover:text-zinc-700"
+            )}
+          >
+            runtime
+          </button>
+        </div>
+
         <div className="mt-3">
           <div className="flex items-center justify-between text-xs text-zinc-600 mb-1.5">
-            <span>{completed.size} of {STEP_DEFS.length} complete</span>
-            <span>{Math.round((completed.size / STEP_DEFS.length) * 100)}%</span>
+            <span>{completedCount} of {steps.length} complete</span>
+            <span>{Math.round(progress)}%</span>
           </div>
-          <Progress value={(completed.size / STEP_DEFS.length) * 100} className="h-1.5" />
+          <Progress value={progress} className="h-1.5" />
         </div>
       </div>
       <nav className="p-3 space-y-0.5">
-        {STEP_DEFS.map((step) => {
+        {steps.map((step) => {
           const done = completed.has(step.id);
           const active = current === step.id;
           const Icon = step.icon;

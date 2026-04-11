@@ -1,4 +1,4 @@
-import { Checkbox, Label, cn } from "@kairosstack/ui";
+import { Checkbox, Input, Label, cn } from "@kairosstack/ui";
 
 import { INFRA_COMPONENTS } from "../constants";
 import type { DeployTarget, ExecMode, StepProps } from "../types";
@@ -61,6 +61,90 @@ export function StepDeployment({ state, update }: StepProps) {
           ))}
         </div>
       </div>
+
+      {state.deployment_target === "docker_local" && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Container Engine Preference</Label>
+            <div className="grid grid-cols-2 gap-3">
+            {([
+              { id: "docker", label: "Docker", desc: "Default docker compose engine" },
+              { id: "podman", label: "Podman", desc: "Use podman compose commands" },
+            ] as const).map((engine) => (
+              <label
+                key={engine.id}
+                className={cn(
+                  "flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors",
+                  state.container_engine === engine.id
+                    ? "border-zinc-900 bg-zinc-50"
+                    : "border-zinc-200 bg-white hover:border-zinc-300"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="container_engine"
+                  value={engine.id}
+                  checked={state.container_engine === engine.id}
+                  onChange={() => update({ container_engine: engine.id as "docker" | "podman" })}
+                  className="mt-0.5"
+                />
+                <div>
+                  <div className="text-sm font-medium text-zinc-900">{engine.label}</div>
+                  <p className="text-xs text-zinc-500 mt-0.5">{engine.desc}</p>
+                </div>
+              </label>
+            ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Core API Runtime Source</Label>
+            <div className="space-y-2">
+              {([
+                { id: "local_source", label: "Run from this repo", desc: "Use uvicorn in backend/ and compose for infrastructure only" },
+                { id: "bundled_image", label: "Use bundled stable image", desc: "Run core_api from default stable image tag" },
+                { id: "custom_image", label: "Use custom image", desc: "Provide your own image URL/tag (must be accessible by CLI auth)" },
+              ] as const).map((mode) => (
+                <label
+                  key={mode.id}
+                  className={cn(
+                    "flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors",
+                    state.core_api_runtime_mode === mode.id
+                      ? "border-zinc-900 bg-zinc-50"
+                      : "border-zinc-200 bg-white hover:border-zinc-300"
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="core_api_runtime_mode"
+                    value={mode.id}
+                    checked={state.core_api_runtime_mode === mode.id}
+                    onChange={() => update({ core_api_runtime_mode: mode.id })}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-zinc-900">{mode.label}</div>
+                    <p className="text-xs text-zinc-500 mt-0.5">{mode.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            {state.core_api_runtime_mode === "custom_image" && (
+              <div className="space-y-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+                <Label>Custom Core API image</Label>
+                <Input
+                  value={state.core_api_custom_image}
+                  onChange={(e) => update({ core_api_custom_image: e.target.value })}
+                  placeholder="ghcr.io/your-org/kairos-core-api:tag"
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-zinc-500">If private, ensure Docker/Podman CLI is already authenticated to your registry.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Infrastructure Components</Label>

@@ -9,7 +9,19 @@ export function StepReview({ state, update }: StepProps) {
     { label: "Model Modes", value: state.model_modes.join(", ") || "—" },
     { label: "Connections", value: `${state.connections.length} configured` },
     { label: "Deploy Target", value: `${state.deployment_target} · ${state.execution_mode}` },
+    {
+      label: "Container + Core",
+      value:
+        `${state.container_engine} · ${state.core_api_runtime_mode}` +
+        (state.core_api_runtime_mode === "custom_image" && state.core_api_custom_image
+          ? ` · ${state.core_api_custom_image}`
+          : ""),
+    },
     { label: "Infra Components", value: state.infra_components.join(", ") },
+    {
+      label: "Frontend Services",
+      value: state.frontend_services.length > 0 ? state.frontend_services.join(", ") : "none",
+    },
     { label: "Secrets Mode", value: `${state.secrets_mode} → ${state.storage_target}` },
     { label: "Required Keys", value: state.required_keys.length ? state.required_keys.join(", ") : "none" },
     {
@@ -33,6 +45,7 @@ export function StepReview({ state, update }: StepProps) {
           ? `${state.runtime_check_results.filter((r) => r.status === "pass").length} passed, ${state.runtime_check_results.filter((r) => r.status !== "pass").length} not-passed`
           : "not run",
     },
+    { label: "Session ID", value: state.bootstrap_session_id || "not created" },
     { label: "Doc Bootstrap", value: state.ingest_now ? `${state.doc_files.length} files · ${state.chunking_profile}` : "disabled" },
     { label: "Artifacts", value: state.gen_status === "done" ? `${state.artifacts.length} files generated` : "not generated" },
   ];
@@ -42,7 +55,7 @@ export function StepReview({ state, update }: StepProps) {
       {state.gen_status !== "done" && (
         <div className="flex gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
           <AlertTriangle className="h-4 w-4 text-amber-600 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-900">Artifacts haven't been generated yet. Go back to Step 6 before completing.</p>
+          <p className="text-xs text-amber-900">Artifacts haven't been generated yet. Go back to Step 7 before completing.</p>
         </div>
       )}
 

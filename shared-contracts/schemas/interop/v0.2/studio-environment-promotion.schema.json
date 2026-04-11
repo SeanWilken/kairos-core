@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/studio-environment-promotion.schema.json",
+  "title": "StudioEnvironmentPromotion",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_version",
+    "promotion_id",
+    "org_id",
+    "source_environment",
+    "target_environment",
+    "assets",
+    "status",
+    "requested_by",
+    "requested_at"
+  ],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "promotion_id": { "type": "string", "minLength": 1 },
+    "org_id": { "type": "string", "minLength": 1 },
+    "source_environment": { "type": "string", "enum": ["development", "staging", "production"] },
+    "target_environment": { "type": "string", "enum": ["development", "staging", "production"] },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["persona_ids", "workflow_ids", "tool_ids", "knowledge_namespace_ids"],
+      "properties": {
+        "persona_ids": { "type": "array", "items": { "type": "string" } },
+        "workflow_ids": { "type": "array", "items": { "type": "string" } },
+        "tool_ids": { "type": "array", "items": { "type": "string" } },
+        "knowledge_namespace_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "status": { "type": "string", "enum": ["requested", "validated", "approved", "applied", "failed", "cancelled"] },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "compatible_runtime": { "type": "boolean" },
+        "missing_secrets": { "type": "array", "items": { "type": "string" } },
+        "reason_codes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "requested_by": { "type": "string", "minLength": 1 },
+    "requested_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" }
+  }
+}

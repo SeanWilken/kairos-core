@@ -12,11 +12,22 @@ export function StepRuntimeVerifyDocs({ state, update }: StepProps) {
   const runtimeReady = state.runtime_check_results.length > 0 && state.runtime_check_results.filter((r) => r.required).every((r) => r.status === "pass");
 
   const onRunRuntimeChecks = async () => {
-    setRunning(true);
-    update({ runtime_check_status: "running" });
-    const results = await runRuntimeChecks(state);
-    update({ runtime_check_results: results, runtime_check_status: "done" });
-    setRunning(false);
+    try {
+      setRunning(true);
+      update({ runtime_check_status: "running", runtime_check_error: "" });
+      const runtime = await runRuntimeChecks(state);
+      update({
+        bootstrap_session_id: runtime.sessionId,
+        runtime_check_results: runtime.results,
+        runtime_check_status: "done",
+        runtime_check_error: "",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Runtime checks failed.";
+      update({ runtime_check_status: "done", runtime_check_error: message });
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
@@ -31,10 +42,26 @@ export function StepRuntimeVerifyDocs({ state, update }: StepProps) {
         />
         <div className="flex items-center gap-3">
           <Button onClick={onRunRuntimeChecks} disabled={running}>
-            {running ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running Checks…</> : "Run Runtime Checks"}
+            {running ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running Checks…</>
+            ) : state.runtime_check_results.length > 0 ? (
+              "Re-run Runtime Checks"
+            ) : (
+              "Run Runtime Checks"
+            )}
           </Button>
-          <span className="text-xs text-zinc-500">Runs only checks relevant to your selected options.</span>
+          <span className="text-xs text-zinc-500">Runs only checks relevant to your selected options. You can re-run after config changes.</span>
         </div>
+        {state.bootstrap_session_id && (
+          <p className="text-xs text-zinc-500">
+            Active session: <code className="font-mono bg-zinc-100 px-1 rounded">{state.bootstrap_session_id}</code>
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-700 leading-relaxed">
+        <p className="font-semibold text-zinc-900">How API models work with RAG</p>
+        <p className="mt-1">Core retrieves relevant chunks from your vector store, injects them into the prompt context, then sends the grounded prompt to the selected provider model (OpenAI or Anthropic). Runtime checks here validate that the API, database, and vector pipeline are ready before ingest.</p>
       </div>
 
       {state.runtime_check_results.length > 0 && (
@@ -47,6 +74,17 @@ export function StepRuntimeVerifyDocs({ state, update }: StepProps) {
               <span className="text-xs font-semibold uppercase text-zinc-600">{c.status}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {state.runtime_check_error && (
+        <div className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-600" />
+          <div>
+            <p className="text-sm font-semibold text-red-900">Runtime checks failed</p>
+            <p className="mt-0.5 text-xs text-red-800">{state.runtime_check_error}</p>
+            <p className="mt-1 text-xs text-red-700">For local installs, set `APP_ENV=local` on backend or provide `X-Tenant-ID` and `X-Org-ID` headers via gateway.</p>
+          </div>
         </div>
       )}
 

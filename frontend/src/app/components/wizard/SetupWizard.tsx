@@ -2,12 +2,13 @@ import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from 
 import { ArrowRight, CheckCheck } from "lucide-react";
 import { Badge, Button } from "@kairosstack/ui";
 
-import { INITIAL_STATE, STEP_DEFS, STEP_HEADER } from "./constants";
+import { INITIAL_STATE, RUNTIME_WIZARD_STEP_IDS, STEP_DEFS, STEP_HEADER } from "./constants";
 import { StepSidebar } from "./common";
-import { buildPreflightChecks } from "./helpers";
+import { buildPreflightChecks, buildRuntimeChecks } from "./helpers";
 import type { WizardState } from "./types";
 import { StepRuntime } from "./steps/StepRuntime";
 import { StepDeployment } from "./steps/StepDeployment";
+import { StepFrontends } from "./steps/StepFrontends";
 import { StepSecrets } from "./steps/StepSecrets";
 import { StepVector } from "./steps/StepVector";
 import { StepConnectivity } from "./steps/StepConnectivity";
@@ -17,6 +18,7 @@ import { StepRuntimeVerifyDocs } from "./steps/StepRuntimeVerifyDocs";
 
 export function SetupWizard() {
   const [step, setStep] = useState(1);
+  const [mode, setMode] = useState<"bootstrap" | "runtime">("bootstrap");
   const [completed, setCompleted] = useState<Set<number>>(new Set());
   const [state, setState] = useState<WizardState>(INITIAL_STATE);
   const [spotlight, setSpotlight] = useState({ x: 50, y: 50 });
@@ -32,44 +34,71 @@ export function SetupWizard() {
 
   const canContinue = useMemo(() => {
     if (step === 1) return state.tenant_name.trim() && state.model_modes.length > 0 && state.connections.every((c) => c.model_ref.trim());
-    if (step === 5) return state.check_status === "done" && state.check_results.filter((r) => r.required).every((r) => r.status === "pass");
-    if (step === 6) return state.gen_status === "done";
-    if (step === 7) {
+    if (step === 2) {
+      if (state.core_api_runtime_mode === "custom_image") return state.core_api_custom_image.trim().length > 0;
+      return true;
+    }
+    if (step === 6) return state.check_status === "done" && state.check_results.filter((r) => r.required).every((r) => r.status === "pass");
+    if (step === 7) return state.gen_status === "done";
+    if (step === 8) {
       const runtimeReady = state.runtime_check_results.length > 0 && state.runtime_check_results.filter((r) => r.required).every((r) => r.status === "pass");
       return runtimeReady && (!state.ingest_now || state.ingest_status === "done");
     }
-    if (step === 8) return state.confirmed;
+    if (step === 9) return state.confirmed;
     return true;
   }, [step, state]);
 
+  const activeStepIds = useMemo(
+    () => (mode === "bootstrap" ? STEP_DEFS.map((s) => s.id) : [...RUNTIME_WIZARD_STEP_IDS]),
+    [mode]
+  );
+
+  const activeSteps = useMemo(() => STEP_DEFS.filter((s) => activeStepIds.includes(s.id)), [activeStepIds]);
+
+  const currentStepIndex = useMemo(() => activeStepIds.indexOf(step), [activeStepIds, step]);
+
+  const setFlowMode = (nextMode: "bootstrap" | "runtime") => {
+    setMode(nextMode);
+    const nextIds = nextMode === "bootstrap" ? STEP_DEFS.map((s) => s.id) : [...RUNTIME_WIZARD_STEP_IDS];
+    setStep((prev) => (nextIds.includes(prev) ? prev : nextIds[0]));
+  };
+
   const goNext = () => {
     setCompleted((p) => new Set([...p, step]));
-    if (step < 8) setStep((s) => s + 1);
+    if (currentStepIndex >= 0 && currentStepIndex < activeStepIds.length - 1) {
+      setStep(activeStepIds[currentStepIndex + 1]);
+    }
   };
 
   const goPrev = () => {
-    if (step > 1) setStep((s) => s - 1);
+    if (currentStepIndex > 0) setStep(activeStepIds[currentStepIndex - 1]);
   };
 
   const stepForms: Record<number, ReactNode> = {
     1: <StepRuntime state={state} update={update} />,
     2: <StepDeployment state={state} update={update} />,
-    3: <StepSecrets state={state} update={update} />,
-    4: <StepVector state={state} update={update} />,
-    5: <StepConnectivity state={state} runChecks={runChecks} />,
-    6: <StepArtifacts state={state} update={update} />,
-    7: <StepRuntimeVerifyDocs state={state} update={update} />,
-    8: <StepReview state={state} update={update} />,
+    3: <StepFrontends state={state} update={update} />,
+    4: <StepSecrets state={state} update={update} />,
+    5: <StepVector state={state} update={update} />,
+    6: <StepConnectivity state={state} runChecks={runChecks} />,
+    7: <StepArtifacts state={state} update={update} />,
+    8: <StepRuntimeVerifyDocs state={state} update={update} />,
+    9: <StepReview state={state} update={update} />,
   };
 
   const stepDetail = useMemo(() => {
     if (step === 1) return `Tenant: ${state.tenant_name || "(unnamed)"} · Modes: ${state.model_modes.join(", ")}`;
-    if (step === 2) return `Target: ${state.deployment_target} · Mode: ${state.execution_mode}`;
-    if (step === 3) return `Secrets: ${state.secrets_mode} · Keys: ${state.required_keys.length}`;
-    if (step === 4) return `Vector: ${state.vector_store_mode}${state.vector_store_mode === "enabled" ? ` (${state.vector_provider})` : ""}`;
-    if (step === 5) return `Preflight: ${state.check_status} · Passed: ${state.check_results.filter((r) => r.status === "pass").length}`;
-    if (step === 6) return `Artifacts: ${state.gen_status} · Files: ${state.artifacts.length}`;
-    if (step === 7) return `Runtime checks: ${state.runtime_check_results.length} · Ingest: ${state.ingest_now ? state.ingest_status : "disabled"}`;
+    if (step === 2) return `Target: ${state.deployment_target} · Engine: ${state.container_engine} · Core: ${state.core_api_runtime_mode} · Mode: ${state.execution_mode}`;
+    if (step === 3) return `Frontends: ${state.frontend_services.length === 0 ? "none" : state.frontend_services.join(", ")}`;
+    if (step === 4) return `Secrets: ${state.secrets_mode} · Keys: ${state.required_keys.length}`;
+    if (step === 5) return `Vector: ${state.vector_store_mode}${state.vector_store_mode === "enabled" ? ` (${state.vector_provider})` : ""}`;
+    if (step === 6) return `Preflight: ${state.check_status} · Passed: ${state.check_results.filter((r) => r.status === "pass").length}`;
+    if (step === 7) return `Artifacts: ${state.gen_status} · Files: ${state.artifacts.length}`;
+    if (step === 8) {
+      const expectedRequired = buildRuntimeChecks(state).filter((check) => check.required).length;
+      const completedRequired = state.runtime_check_results.filter((check) => check.required).length;
+      return `Runtime checks: ${completedRequired}/${expectedRequired} required · Ingest: ${state.ingest_now ? state.ingest_status : "disabled"}`;
+    }
     return `Review readiness: ${state.confirmed ? "confirmed" : "pending"}`;
   }, [step, state]);
 
@@ -82,12 +111,12 @@ export function SetupWizard() {
 
   return (
     <div className="flex flex-1 overflow-hidden h-full">
-      <StepSidebar current={step} completed={completed} />
+      <StepSidebar current={step} completed={completed} steps={activeSteps} mode={mode} onModeChange={setFlowMode} />
 
       <div className="flex-1 overflow-y-auto bg-zinc-50">
         <div className="w-full px-4 py-6 lg:px-8 xl:px-10">
           <div className="mb-6">
-            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Step {step} of {STEP_DEFS.length}</p>
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-1">Step {Math.max(1, currentStepIndex + 1)} of {activeStepIds.length}</p>
             <h1 className="text-2xl font-bold text-zinc-900">{STEP_HEADER[step].title}</h1>
             <p className="text-sm text-zinc-600 mt-1">{STEP_HEADER[step].description}</p>
           </div>
@@ -121,12 +150,12 @@ export function SetupWizard() {
           <div className="border border-zinc-200 rounded-lg bg-white p-6 mb-6">{stepForms[step]}</div>
 
           <div className="flex items-center justify-between">
-            <Button variant="outline" onClick={goPrev} disabled={step === 1}>← Back</Button>
+            <Button variant="outline" onClick={goPrev} disabled={currentStepIndex <= 0}>← Back</Button>
 
             <div className="flex items-center gap-3">
-              {!canContinue && step < 8 && <Badge variant="secondary">Complete required fields</Badge>}
+              {!canContinue && step !== activeStepIds[activeStepIds.length - 1] && <Badge variant="secondary">Complete required fields</Badge>}
 
-              {step < 8 ? (
+              {step !== activeStepIds[activeStepIds.length - 1] ? (
                 <Button onClick={goNext} disabled={!canContinue}>
                   Continue <ArrowRight className="h-4 w-4 ml-1.5" />
                 </Button>

@@ -1,7 +1,10 @@
 export type ModelMode = "api_provider" | "local_model";
-export type ApiProvider = "openai" | "anthropic" | "google" | "azure_openai" | "custom";
+export type ApiProvider = "openai" | "anthropic" | "custom";
 export type LocalProvider = "ollama" | "lmstudio" | "custom";
 export type DeployTarget = "docker_local" | "k8s" | "terraform" | "github_actions";
+export type ContainerEngine = "docker" | "podman";
+export type CoreApiRuntimeMode = "local_source" | "bundled_image" | "custom_image";
+export type FrontendService = "kros_core_frontend" | "kros_studio_frontend" | "kros_council_frontend";
 export type ExecMode = "generate_only" | "attempt_automated";
 export type SecretsMode = "template_only" | "transient_validate_only" | "pipeline_injected";
 export type VectorMode = "disabled" | "enabled";
@@ -27,7 +30,7 @@ export interface CheckItem {
 
 export interface GeneratedArtifact {
   name: string;
-  type: "env" | "yaml" | "json" | "sh";
+  type: "env" | "yaml" | "json" | "sh" | "md" | "ps1" | "sql";
   content: string;
 }
 
@@ -37,11 +40,18 @@ export interface WizardState {
   model_modes: ModelMode[];
   connections: Connection[];
   deployment_target: DeployTarget;
+  container_engine: ContainerEngine;
+  core_api_runtime_mode: CoreApiRuntimeMode;
+  core_api_custom_image: string;
+  frontend_services: FrontendService[];
   execution_mode: ExecMode;
   infra_components: string[];
   secrets_mode: SecretsMode;
   storage_target: string;
   required_keys: string[];
+  materialize_local_env: boolean;
+  local_secret_values: Record<string, string>;
+  local_env_overrides: Record<string, string>;
   vector_store_mode: VectorMode;
   vector_provider: "pgvector" | "pinecone";
   namespace_pattern: string;
@@ -51,7 +61,9 @@ export interface WizardState {
   check_results: CheckItem[];
   runtime_check_status: CheckStatus;
   runtime_check_results: CheckItem[];
+  runtime_check_error: string;
   runtime_base_url: string;
+  bootstrap_session_id: string;
   ingest_now: boolean;
   doc_files: string[];
   chunking_profile: string;

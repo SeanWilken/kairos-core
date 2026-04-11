@@ -3,6 +3,18 @@ import { Badge, Button, Input, Label, Select, SelectContent, SelectItem, SelectT
 
 import type { Connection, ModelMode, StepProps } from "../types";
 
+const API_DEFAULTS: Record<string, { endpoint: string; model: string }> = {
+  openai: { endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini" },
+  anthropic: { endpoint: "https://api.anthropic.com", model: "claude-3-5-sonnet-latest" },
+  custom: { endpoint: "https://api.example.com/v1", model: "model-name" },
+};
+
+const LOCAL_DEFAULTS: Record<string, { endpoint: string; model: string }> = {
+  ollama: { endpoint: "http://localhost:11434", model: "llama3.1" },
+  lmstudio: { endpoint: "http://localhost:1234", model: "local-model" },
+  custom: { endpoint: "http://localhost:9000", model: "local-model" },
+};
+
 export function StepRuntime({ state, update }: StepProps) {
   const toggleMode = (m: ModelMode) => {
     const next = state.model_modes.includes(m) ? state.model_modes.filter((x) => x !== m) : [...state.model_modes, m];
@@ -27,6 +39,24 @@ export function StepRuntime({ state, update }: StepProps) {
   };
 
   const updConn = (id: string, key: keyof Connection, value: string | number) => {
+    if (key === "provider") {
+      const conn = state.connections.find((c) => c.id === id);
+      if (!conn) return;
+      const defaults = conn.mode === "api_provider" ? API_DEFAULTS[String(value)] : LOCAL_DEFAULTS[String(value)];
+      update({
+        connections: state.connections.map((c) =>
+          c.id === id
+            ? {
+                ...c,
+                provider: value as Connection["provider"],
+                endpoint: defaults?.endpoint ?? c.endpoint,
+                model_ref: defaults?.model ?? c.model_ref,
+              }
+            : c
+        ),
+      });
+      return;
+    }
     update({ connections: state.connections.map((c) => (c.id === id ? { ...c, [key]: value } : c)) });
   };
 
@@ -108,7 +138,7 @@ export function StepRuntime({ state, update }: StepProps) {
                     <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
                     <SelectContent className="kairos-overlay-content kairos-select-content">
                       {conn.mode === "api_provider"
-                        ? ["openai", "anthropic", "google", "azure_openai", "custom"].map((p) => <SelectItem key={p} value={p} className="kairos-overlay-item text-xs">{p}</SelectItem>)
+                        ? ["openai", "anthropic", "custom"].map((p) => <SelectItem key={p} value={p} className="kairos-overlay-item text-xs">{p}</SelectItem>)
                         : ["ollama", "lmstudio", "custom"].map((p) => <SelectItem key={p} value={p} className="kairos-overlay-item text-xs">{p}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -142,7 +172,7 @@ export function StepRuntime({ state, update }: StepProps) {
       {state.model_modes.includes("api_provider") && (
         <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-800">API keys will be configured in Step 3. Only key names are stored in this session.</p>
+          <p className="text-xs text-blue-800">OpenAI and Anthropic are supported out of the box. API keys are configured in Step 3; only key names are stored in this session.</p>
         </div>
       )}
 

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/studio-workflow-definition.schema.json",
+  "title": "StudioWorkflowDefinition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "workflow_id", "org_id", "name", "trigger", "steps", "policy", "created_at", "updated_at"],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "workflow_id": { "type": "string", "minLength": 1 },
+    "org_id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["manual", "schedule", "event", "webhook"] },
+        "cron": { "type": "string" },
+        "event_name": { "type": "string" },
+        "webhook_path": { "type": "string" }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step_id", "kind", "config"],
+        "properties": {
+          "step_id": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "enum": ["persona_prompt", "tool_call", "knowledge_query", "approval_gate", "notification"] },
+          "config": { "type": "object" }
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retry_count", "timeout_seconds", "failure_mode"],
+      "properties": {
+        "retry_count": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "timeout_seconds": { "type": "integer", "minimum": 1 },
+        "failure_mode": { "type": "string", "enum": ["halt", "continue", "manual_review"] }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

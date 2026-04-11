@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/studio-persona-profile.schema.json",
+  "title": "StudioPersonaProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "persona_id", "org_id", "name", "scope", "prompt_contract", "safety_profile", "created_at", "updated_at"],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "persona_id": { "type": "string", "minLength": 1 },
+    "org_id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["division_ids", "visibility"],
+      "properties": {
+        "division_ids": { "type": "array", "items": { "type": "string" } },
+        "visibility": { "type": "string", "enum": ["org", "division", "private"] }
+      }
+    },
+    "prompt_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system_prompt", "style_constraints"],
+      "properties": {
+        "system_prompt": { "type": "string", "minLength": 1 },
+        "style_constraints": { "type": "array", "items": { "type": "string" } },
+        "disallowed_behaviors": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "safety_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk_tier"],
+      "properties": {
+        "risk_tier": { "type": "string", "enum": ["low", "medium", "high"] },
+        "requires_human_review": { "type": "boolean" }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
