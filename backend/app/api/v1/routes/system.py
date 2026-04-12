@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app.core.auth_context import require_authentication
 from app.core.onboarding_store import onboarding_store
 from app.core.request_context import require_request_scope
 from app.core.response import ok_response
@@ -38,7 +39,7 @@ def get_system_status(request: Request, session_id: str) -> dict[str, Any]:
 
 @router.post("/system/checks/run")
 def run_system_checks(request: Request, payload: RuntimeChecksRunPayload) -> dict[str, Any]:
-    require_request_scope(request)
+    require_authentication(request, require_org=True)
     status = onboarding_store.run_runtime_checks(
         payload.session_id,
         tenant_id=request.state.tenant_id,

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.contracts.v1._auth_helpers import register_and_login
 
 
 HEADERS = {
@@ -54,10 +55,11 @@ def test_system_status_contract() -> None:
 def test_system_checks_run_contract() -> None:
     client = TestClient(app)
     session_id = _create_session(client)
+    auth_headers = register_and_login(client, scope_org_id="org0")
 
     response = client.post(
         "/v1/system/checks/run",
-        headers=HEADERS,
+        headers=auth_headers,
         json={"session_id": session_id},
     )
 

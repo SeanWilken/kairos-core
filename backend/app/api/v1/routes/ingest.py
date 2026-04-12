@@ -5,8 +5,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app.core.auth_context import require_authentication
 from app.core.onboarding_store import onboarding_store
-from app.core.request_context import require_request_scope
 from app.core.response import ok_response
 
 router = APIRouter(tags=["ingest"])
@@ -22,7 +22,7 @@ class IngestJobCreatePayload(BaseModel):
 
 @router.post("/ingest/jobs")
 def create_ingest_job(request: Request, payload: IngestJobCreatePayload) -> dict[str, Any]:
-    require_request_scope(request)
+    require_authentication(request, require_org=True)
 
     session = onboarding_store.get_bootstrap_session(
         payload.session_id,
@@ -76,7 +76,7 @@ def create_ingest_job(request: Request, payload: IngestJobCreatePayload) -> dict
 
 @router.get("/ingest/jobs/{job_id}")
 def get_ingest_job(request: Request, job_id: str) -> dict[str, Any]:
-    require_request_scope(request)
+    require_authentication(request, require_org=True)
     job = onboarding_store.get_ingest_job(
         job_id,
         tenant_id=request.state.tenant_id,

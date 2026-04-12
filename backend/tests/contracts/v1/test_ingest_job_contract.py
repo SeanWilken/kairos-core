@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.contracts.v1._auth_helpers import register_and_login
 
 
 HEADERS = {
@@ -38,10 +39,11 @@ def _create_session(client: TestClient) -> str:
 def test_ingest_job_requires_runtime_checks() -> None:
     client = TestClient(app)
     session_id = _create_session(client)
+    auth_headers = register_and_login(client, scope_org_id="org0")
 
     response = client.post(
         "/v1/ingest/jobs",
-        headers=HEADERS,
+        headers=auth_headers,
         json={
             "session_id": session_id,
             "source_files": [{"path": "docs/intro.md", "checksum": "abc123"}],
@@ -59,17 +61,18 @@ def test_ingest_job_requires_runtime_checks() -> None:
 def test_ingest_job_create_and_get_contract() -> None:
     client = TestClient(app)
     session_id = _create_session(client)
+    auth_headers = register_and_login(client, scope_org_id="org0")
 
     checks_response = client.post(
         "/v1/system/checks/run",
-        headers=HEADERS,
+        headers=auth_headers,
         json={"session_id": session_id},
     )
     assert checks_response.status_code == 200
 
     create_response = client.post(
         "/v1/ingest/jobs",
-        headers=HEADERS,
+        headers=auth_headers,
         json={
             "session_id": session_id,
             "source_files": [{"path": "docs/intro.md", "checksum": "abc123"}],
@@ -88,7 +91,7 @@ def test_ingest_job_create_and_get_contract() -> None:
     assert create_body["data"]["session_id"] == session_id
 
     job_id = create_body["data"]["job_id"]
-    get_response = client.get(f"/v1/ingest/jobs/{job_id}", headers=HEADERS)
+    get_response = client.get(f"/v1/ingest/jobs/{job_id}", headers=auth_headers)
     assert get_response.status_code == 200
     get_body = get_response.json()
     assert get_body["error"] is None

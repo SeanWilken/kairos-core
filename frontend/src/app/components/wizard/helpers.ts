@@ -1,4 +1,12 @@
 import type { CheckItem, CheckResult, GeneratedArtifact, WizardState } from "./types";
+import {
+  CoreApiError,
+  bootstrapApi,
+  createCoreApiClient,
+  systemApi,
+  type ApiScope,
+  type RuntimeCheck,
+} from "../../../lib/api";
 
 function setEnvValue(content: string, key: string, value: string): string {
   const line = `${key}=${value}`;
@@ -93,92 +101,34 @@ export function buildRuntimeChecks(state: WizardState): CheckItem[] {
   return checks;
 }
 
-function buildScopeHeaders(state: WizardState): Record<string, string> {
+function buildApiScope(state: WizardState): ApiScope {
   const slug = state.tenant_name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-") || "local";
   return {
-    "X-Tenant-ID": `tenant-${slug}`,
-    "X-Org-ID": `org-${slug}`,
+    tenantId: `tenant-${slug}`,
+    orgId: `org-${slug}`,
   };
 }
 
-async function postJson(
-  url: string,
-  payload: unknown,
-  headers: Record<string, string>
-): Promise<{ ok: boolean; status: number; body?: unknown }> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...headers,
-    },
-    body: JSON.stringify(payload),
-  });
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = undefined;
-  }
-  return { ok: response.ok, status: response.status, body };
-}
-
-async function getWithQueryParams(
-  url: string,
-  params: Record<string, string>,
-  headers: Record<string, string>
-): Promise<{ ok: boolean; status: number; body?: unknown }> {
-  const urlWithParams = new URL(url);
-  Object.entries(params).forEach(([key, value]) => {
-    urlWithParams.searchParams.set(key, value);
-  });
-
-  const response = await fetch(urlWithParams.toString(), { method: "GET", headers });
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = undefined;
-  }
-  return { ok: response.ok, status: response.status, body };
-}
-
-async function getJson(url: string, headers: Record<string, string>): Promise<{ ok: boolean; status: number; body?: unknown }> {
-  const response = await fetch(url, { method: "GET", headers });
-  let body: unknown;
-  try {
-    body = await response.json();
-  } catch {
-    body = undefined;
-  }
-  return { ok: response.ok, status: response.status, body };
-}
-
-function parseApiError(body: unknown, fallback: string): string {
-  if (!body || typeof body !== "object") return fallback;
-  const root = body as { error?: { message?: string; details?: Record<string, unknown> } };
-  const message = root.error?.message;
-  const reason = root.error?.details?.reason_code;
-  if (typeof message === "string" && typeof reason === "string") {
-    return `${message} (${reason})`;
-  }
-  if (typeof message === "string") return message;
-  return fallback;
-}
-
 export async function ensureBootstrapSession(state: WizardState): Promise<string> {
-  const base = state.runtime_base_url.replace(/\/$/, "");
-  const headers = buildScopeHeaders(state);
+  const client = createCoreApiClient({
+    baseUrl: state.runtime_base_url,
+    scope: buildApiScope(state),
+  });
 
   if (state.bootstrap_session_id.trim()) {
-    const existing = await getJson(`${base}/v1/bootstrap/sessions/${state.bootstrap_session_id}`, headers);
-    if (existing.ok) return state.bootstrap_session_id;
+    try {
+      await bootstrapApi.getSession(client, state.bootstrap_session_id);
+      return state.bootstrap_session_id;
+    } catch (error) {
+      if (!(error instanceof CoreApiError) || error.status !== 404) {
+        throw error;
+      }
+    }
   }
 
-  const latest = await getWithQueryParams(`${base}/v1/bootstrap/sessions`, { latest: "true" }, headers);
-  if (latest.ok && latest.body && typeof latest.body === "object") {
-    const body = latest.body as { data?: { session_id?: string } | null };
-    const latestId = body.data?.session_id;
+  const latest = await bootstrapApi.listSessions(client, { latest: true });
+  if (latest && !Array.isArray(latest)) {
+    const latestId = latest.session_id;
     if (latestId) return latestId;
   }
 
@@ -219,39 +169,42 @@ export async function ensureBootstrapSession(state: WizardState): Promise<string
     },
   };
 
-  const res = await postJson(`${base}/v1/bootstrap/sessions`, payload, headers);
-  if (!res.ok || !res.body || typeof res.body !== "object") {
-    throw new Error(parseApiError(res.body, "Failed to create bootstrap session."));
-  }
-  const body = res.body as { data?: { session_id?: string } };
-  const sessionId = body.data?.session_id;
+  const createdSession = await bootstrapApi.createSession(client, payload);
+  const sessionId = createdSession.session_id;
   if (!sessionId) throw new Error("Bootstrap session response missing session_id.");
   return sessionId;
 }
 
+function mapRuntimeChecksFromApi(checks: RuntimeCheck[]): Array<{ check_id?: string; status?: string; message?: string; label?: string }> {
+  return checks.map((check) => ({
+    check_id: check.check_id,
+    status: check.status,
+    message: check.message,
+    label: check.label,
+  }));
+}
+
 export async function runRuntimeChecks(state: WizardState): Promise<{ results: CheckItem[]; sessionId: string }> {
   const checks = buildRuntimeChecks(state);
-  const base = state.runtime_base_url.replace(/\/$/, "");
-  const headers = buildScopeHeaders(state);
+  const client = createCoreApiClient({
+    baseUrl: state.runtime_base_url,
+    scope: buildApiScope(state),
+  });
   const sessionId = await ensureBootstrapSession(state);
 
   let latestStatus: Array<{ check_id?: string; status?: string; message?: string; label?: string }> = [];
-  const runRes = await postJson(`${base}/v1/system/checks/run`, { session_id: sessionId }, headers);
-  if (runRes.ok && runRes.body && typeof runRes.body === "object") {
-    const body = runRes.body as { data?: { checks?: Array<{ check_id?: string; status?: string; message?: string; label?: string }> } };
-    latestStatus = body.data?.checks ?? [];
-  } else if (runRes.status !== 404) {
-    throw new Error(parseApiError(runRes.body, "Failed to run runtime checks."));
+  try {
+    const runStatus = await systemApi.runChecks(client, { session_id: sessionId });
+    latestStatus = mapRuntimeChecksFromApi(runStatus.checks ?? []);
+  } catch (error) {
+    if (!(error instanceof CoreApiError) || error.status !== 404) {
+      throw error;
+    }
   }
 
   if (latestStatus.length === 0) {
-    const statusRes = await getWithQueryParams(`${base}/v1/system/status`, { session_id: sessionId }, headers);
-    if (statusRes.ok && statusRes.body && typeof statusRes.body === "object") {
-      const body = statusRes.body as { data?: { checks?: Array<{ check_id?: string; status?: string; message?: string; label?: string }> } };
-      latestStatus = body.data?.checks ?? [];
-    } else {
-      throw new Error(parseApiError(statusRes.body, "Failed to fetch runtime status."));
-    }
+    const status = await systemApi.getStatus(client, sessionId);
+    latestStatus = mapRuntimeChecksFromApi(status.checks ?? []);
   }
 
   const byCheckId = new Map<string, { status?: string; message?: string; label?: string }>();
@@ -344,7 +297,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
       compose += "\n  # Core API built from local repository source.\n";
       compose += "  core_api:\n";
       compose += "    build:\n";
-      compose += "      context: ../backend\n";
+      compose += "      context: ./backend\n";
       compose += "      dockerfile: Dockerfile\n";
       compose += "    image: ${CORE_API_IMAGE}\n";
       compose += "    env_file: .env\n";
@@ -391,7 +344,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
     compose += `\n  ${serviceId}:\n`;
     if (serviceId === "kros_core_frontend") {
       compose += "    build:\n";
-      compose += "      context: ../frontend\n";
+      compose += "      context: ./frontend\n";
       compose += "      dockerfile: Dockerfile\n";
       compose += `    image: ${frontend.image}\n`;
     } else {
@@ -409,7 +362,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
 
   if (state.infra_components.includes("postgres") || state.infra_components.includes("pgvector")) {
     const img = state.infra_components.includes("pgvector") ? "pgvector/pgvector:pg16" : "postgres:16-alpine";
-    compose += `\n  postgres:\n    image: ${img}\n    environment:\n      POSTGRES_DB: \${POSTGRES_DB}\n      POSTGRES_USER: \${POSTGRES_USER}\n      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n      - ./migrations/0001_initial_onboarding.sql:/docker-entrypoint-initdb.d/0001_initial_onboarding.sql:ro\n    ports:\n      - \"\${POSTGRES_PORT:-5432}:5432\"\n`;
+    compose += `\n  postgres:\n    image: ${img}\n    environment:\n      POSTGRES_DB: \${POSTGRES_DB}\n      POSTGRES_USER: \${POSTGRES_USER}\n      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n      - ./migrations:/docker-entrypoint-initdb.d:ro\n    ports:\n      - \"\${POSTGRES_PORT:-5432}:5432\"\n`;
   }
 
   if (state.infra_components.includes("local_model_runtime")) {
@@ -438,6 +391,7 @@ kairos-core/
   check-runtime.ps1
   migrations/
     0001_initial_onboarding.sql
+    0002_studio_identity_foundation.sql
   bootstrap-report.json
   backend/
 \`\`\`
@@ -445,7 +399,7 @@ kairos-core/
 ## Script reference
 - \`bootstrap-local.sh\` / \`bootstrap-local.ps1\`: starts local infrastructure containers using your selected engine (Docker or Podman).
 - \`check-runtime.sh\` / \`check-runtime.ps1\`: checks Core health endpoint and prints runtime-status endpoint guidance.
-- Initial DB schema is auto-applied on first postgres boot from \`migrations/0001_initial_onboarding.sql\`.
+- SQL files in \`migrations/\` are auto-applied on first postgres boot (in lexical filename order).
 
 ## Core runtime options
 - local source mode: build and run Core from this repository backend Dockerfile.
@@ -457,8 +411,8 @@ kairos-core/
 2. Start infrastructure:
    - Bash: \`./bootstrap-local.sh\`
    - PowerShell: \`.\\bootstrap-local.ps1\`
-3. If using local source mode, compose builds \`core_api\` from \`../backend/Dockerfile\`.
-4. On first postgres start, compose auto-applies \`migrations/0001_initial_onboarding.sql\` via \`/docker-entrypoint-initdb.d\`.
+3. If using local source mode, compose builds \`core_api\` from \`./backend/Dockerfile\`.
+4. On first postgres start, compose auto-applies repo-root \`migrations/*.sql\` via \`/docker-entrypoint-initdb.d\`.
 5. Run runtime checks:
    - Bash: \`./check-runtime.sh\`
    - PowerShell: \`.\\check-runtime.ps1\`
@@ -468,7 +422,7 @@ kairos-core/
 - Generated compose always includes infrastructure dependencies (PostgreSQL/pgvector and optional local model runtime).
 - In local source mode, core_api is built from local repository backend source.
 - In bundled/custom image modes, core_api is active and uses CORE_API_IMAGE.
-- Optional frontend services are included only when selected in the Frontends step and are wired to \`http://core_api:8000\`.
+- Optional frontend services are included only when selected in the Frontends step and are wired to \`http://localhost:\${CORE_API_PORT:-8000}\`.
 
 ## Session resume
 - Runtime checks and ingest use a bootstrap \`session_id\`.
@@ -491,7 +445,7 @@ $ENGINE compose up -d
 
 echo "Infrastructure started with $ENGINE compose."
 if [ "$CORE_MODE" = "local_source" ]; then
-  echo "Core API local-source mode active (built from ../backend/Dockerfile)."
+  echo "Core API local-source mode active (built from ./backend/Dockerfile)."
 else
   echo "Core API container mode active via CORE_API_IMAGE."
 fi
@@ -509,7 +463,7 @@ if (-not (Test-Path ".env")) {
 & $engine compose up -d
 Write-Host "Infrastructure started with $engine compose."
 if ($coreMode -eq "local_source") {
-  Write-Host "Core API local-source mode active (built from ../backend/Dockerfile)."
+  Write-Host "Core API local-source mode active (built from ./backend/Dockerfile)."
 } else {
   Write-Host "Core API container mode active via CORE_API_IMAGE."
 }
@@ -553,50 +507,6 @@ if ($sessionId) {
   Write-Host "Set KAIROS_SESSION_ID and re-run to query /v1/system/status."
   Write-Host "Example: $env:KAIROS_SESSION_ID='<session-uuid>'; .\\check-runtime.ps1"
 }
-`;
-
-  const initialMigrationSql = `-- 0001_initial_onboarding.sql
--- Initial schema for bootstrap sessions, runtime checks, and ingest jobs.
-
-CREATE TABLE IF NOT EXISTS bootstrap_sessions (
-  session_id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
-  org_id TEXT NOT NULL,
-  status TEXT NOT NULL,
-  runtime_json JSONB NOT NULL,
-  database_json JSONB NOT NULL,
-  deployment_json JSONB NOT NULL,
-  secrets_json JSONB NOT NULL,
-  vector_json JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS runtime_check_runs (
-  run_id BIGSERIAL PRIMARY KEY,
-  session_id TEXT NOT NULL REFERENCES bootstrap_sessions(session_id) ON DELETE CASCADE,
-  checks_json JSONB NOT NULL,
-  summary_json JSONB NOT NULL,
-  observed_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS ingest_jobs (
-  job_id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL REFERENCES bootstrap_sessions(session_id) ON DELETE CASCADE,
-  status TEXT NOT NULL,
-  source_files_json JSONB NOT NULL,
-  chunking_profile TEXT NOT NULL,
-  embedding_profile TEXT NOT NULL,
-  result_json JSONB,
-  error_json JSONB,
-  created_at TIMESTAMPTZ NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_bootstrap_sessions_scope ON bootstrap_sessions (tenant_id, org_id);
-CREATE INDEX IF NOT EXISTS idx_runtime_check_runs_session ON runtime_check_runs (session_id, observed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_ingest_jobs_session ON ingest_jobs (session_id, created_at DESC);
 `;
 
   const bundleManifest = (files: GeneratedArtifact[]) => {
@@ -663,11 +573,6 @@ CREATE INDEX IF NOT EXISTS idx_ingest_jobs_session ON ingest_jobs (session_id, c
     artifacts.push({ name: "docker-compose.yml", type: "yaml", content: compose });
     artifacts.push({ name: "bootstrap-local.sh", type: "sh", content: bootstrapSh });
     artifacts.push({ name: "bootstrap-local.ps1", type: "ps1", content: bootstrapPs1 });
-    artifacts.push({
-      name: "migrations/0001_initial_onboarding.sql",
-      type: "sql",
-      content: initialMigrationSql,
-    });
     artifacts.push({ name: "check-runtime.sh", type: "sh", content: checkRuntimeSh });
     artifacts.push({ name: "check-runtime.ps1", type: "ps1", content: checkRuntimePs1 });
     artifacts.push({ name: "bootstrap-bundle.json", type: "json", content: "" });

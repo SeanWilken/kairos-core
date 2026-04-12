@@ -18,6 +18,9 @@ class Settings(BaseModel):
     app_version: str
     database_url: str
     cors_allowed_origins: list[str]
+    jwt_secret: str
+    jwt_access_token_ttl_minutes: int
+    jwt_refresh_token_ttl_days: int
 
 
 @lru_cache
@@ -50,4 +53,7 @@ def get_settings() -> Settings:
             os.getenv("KAIROS_DATABASE_URL") or os.getenv("DATABASE_URL") or _default_database_url()
         ),
         cors_allowed_origins=cors_allowed_origins,
+        jwt_secret=os.getenv("JWT_SECRET", "kairos-local-dev-secret-change-me"),
+        jwt_access_token_ttl_minutes=int(os.getenv("JWT_ACCESS_TTL_MINUTES", "15")),
+        jwt_refresh_token_ttl_days=int(os.getenv("JWT_REFRESH_TTL_DAYS", "14")),
     )

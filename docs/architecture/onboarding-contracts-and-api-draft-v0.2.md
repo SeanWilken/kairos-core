@@ -158,6 +158,28 @@ Generated bootstrap instructions should include:
 - `POST /v1/studio/promotions/{promotion_id}/apply`
   - payload/response target: `StudioEnvironmentPromotion`
 
+## Do soon: realtime channel and chat unification
+
+Add a lightweight websocket channel for runtime and collaboration signals:
+
+- broadcast core connectivity changes (connected/disconnected/degraded)
+- broadcast service health events for dependent components
+- support unified chat transport so UX is cohesive across persona chat, council/meeting sessions, and colleague messaging
+
+Studio implications:
+
+- add onboarding/setup surfaces for chat server configuration (initially simple chat, Discord-like model later)
+- include websocket/chat runtime metadata in Studio handoff and environment promotion compatibility checks
+
+Implementation sequencing note:
+
+- complete JWT auth/session rollout first so websocket channels can authenticate with the same access token context
+- then add websocket gateway channels for:
+  - system notifications (process complete, credit exhaustion, schedule events)
+  - user presence/status
+  - direct and persona/council chat streams
+  - agent/LLM streamed interaction events
+
 ## Cross-cutting contract rules
 
 - Include `spec_version` on every contract object.

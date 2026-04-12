@@ -30,9 +30,9 @@ def test_protected_ping_still_requires_scope_headers() -> None:
         headers={"X-Correlation-ID": "test-correlation-id"},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     body = response.json()
-    assert body["error"]["code"] == "ACCESS_DENIED"
+    assert body["error"]["code"] == "UNAUTHORIZED"
 
 
 def test_bootstrap_route_supports_local_cors_preflight() -> None:

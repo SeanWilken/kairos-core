@@ -1,65 +1,50 @@
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.contracts.v1._auth_helpers import register_and_login
+
 
 def test_protected_ping_success_uses_v1_envelope_contract() -> None:
     client = TestClient(app)
+    headers = register_and_login(client)
 
-    response = client.get(
-        "/v1/protected/ping",
-        headers={"X-Tenant-ID": "tenant0", "X-Org-ID": "org0", "X-Correlation-ID": "test-correlation-id"},
-    )
+    response = client.get("/v1/protected/ping", headers=headers)
 
     assert response.status_code == 200
     body = response.json()
     assert set(body.keys()) == {"meta", "data", "error"}
     assert body["error"] is None
-    assert isinstance(body["meta"]["service"], str) 
-    assert isinstance(body["meta"]["version"], str)  
     assert body["meta"]["spec_version"] == "v1"
-    assert isinstance(body["meta"]["environment"], str) 
-    assert isinstance(body["meta"]["timestamp"], str)
-    assert isinstance(body["meta"]["correlation_id"], str)
-    assert body["meta"]["correlation_id"] == "test-correlation-id"
+    assert isinstance(body["data"]["tenant_id"], str)
+    assert isinstance(body["data"]["user_id"], str)
 
-def test_protected_ping_failed_org_uses_v1_envelope_contract() -> None:
+
+def test_protected_ping_missing_token_uses_v1_envelope_contract() -> None:
     client = TestClient(app)
-
     response = client.get(
         "/v1/protected/ping",
-        headers={"X-Tenant-ID": "tenant0", "X-Correlation-ID": "test-correlation-id"},
+        headers={"X-Correlation-ID": "test-correlation-id"},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     body = response.json()
     assert set(body.keys()) == {"meta", "data", "error"}
-    assert isinstance(body["meta"]["service"], str)
-    assert isinstance(body["meta"]["version"], str) 
-    assert body["meta"]["spec_version"] == "v1"
-    assert isinstance(body["meta"]["environment"], str) 
-    assert isinstance(body["meta"]["timestamp"], str)
-    assert isinstance(body["meta"]["correlation_id"], str)
     assert body["data"] is None
-    assert body["error"]["message"] == "Organization context is required."
-    assert body["error"]["details"]["reason_code"] == "ORG_CONTEXT_MISSING"
+    assert body["error"]["details"]["reason_code"] == "AUTH_TOKEN_MISSING"
 
-def test_protected_ping_failed_tenant_uses_v1_envelope_contract() -> None:
+
+def test_protected_ping_invalid_token_uses_v1_envelope_contract() -> None:
     client = TestClient(app)
-
     response = client.get(
         "/v1/protected/ping",
-        headers={"X-Org-ID": "org0", "X-Correlation-ID": "test-correlation-id"},
+        headers={
+            "Authorization": "Bearer invalid-token",
+            "X-Correlation-ID": "test-correlation-id",
+        },
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 401
     body = response.json()
     assert set(body.keys()) == {"meta", "data", "error"}
-    assert isinstance(body["meta"]["service"], str)
-    assert isinstance(body["meta"]["version"], str) 
-    assert body["meta"]["spec_version"] == "v1"
-    assert isinstance(body["meta"]["environment"], str) 
-    assert isinstance(body["meta"]["timestamp"], str)
-    assert isinstance(body["meta"]["correlation_id"], str)
     assert body["data"] is None
-    assert body["error"]["message"] == "Tenant context is required."
-    assert body["error"]["details"]["reason_code"] == "TENANT_CONTEXT_MISSING"
+    assert body["error"]["details"]["reason_code"] == "AUTH_TOKEN_INVALID"

@@ -42,7 +42,7 @@ docker run --rm -p 8000:8000 --env-file .env kairos/core-api:local
 Initial SQL migration (draft):
 
 ```powershell
-psql "$env:DATABASE_URL" -f migrations/0001_initial_onboarding.sql
+psql "$env:DATABASE_URL" -f ../migrations/0001_initial_onboarding.sql
 ```
 
 Run tests:

@@ -38,7 +38,7 @@ export function StepArtifacts({ state, update }: StepProps) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-zinc-700">Generate deployment artifacts from your configuration.</p>
-          <p className="text-xs text-zinc-500 mt-1">Output: .env.template · scripts · docker-compose.yml · migrations/0001_initial_onboarding.sql · bootstrap-report.json</p>
+          <p className="text-xs text-zinc-500 mt-1">Output: .env.template · scripts · docker-compose.yml · bootstrap-report.json (uses repo migrations/*.sql)</p>
         </div>
         <Button onClick={generate} disabled={state.gen_status === "generating" || state.gen_status === "done"}>
           {state.gen_status === "generating" ? (

@@ -6,6 +6,7 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+- API endpoints added for: organization, auth, bootstrap and membership POC w/ tests
 - Scaffolded backend response envelope conventions and v1 health endpoint.
 - Added contract/unit/integration test layout and baseline tests.
 - Added ecosystem and architecture documentation for modular repo strategy.
