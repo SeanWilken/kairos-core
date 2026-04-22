@@ -6,6 +6,7 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+- Fixed backend editable-install packaging by constraining setuptools discovery to `app*`, avoiding accidental `migrations` package detection in CI.
 - Added single-tenant bootstrap/auth foundations plus Studio collaboration, realtime websocket, and persona-chat API/runtime primitives with new migrations and contract tests.
 - Added Studio governance foundation endpoints for baseline policy, invites, onboarding status/complete, and organization settings.
 - API endpoints added for: organization, auth, bootstrap and membership POC w/ tests
