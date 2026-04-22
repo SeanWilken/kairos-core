@@ -13,6 +13,16 @@ def register_and_login(
     is_global_admin: bool = True,
     scope_org_id: str | None = None,
 ) -> dict[str, str]:
+    tenant_status = client.get("/v1/bootstrap/tenant/status")
+    assert tenant_status.status_code == 200
+    tenant_data = tenant_status.json()["data"]
+    if not tenant_data["configured"]:
+        bootstrap = client.post(
+            "/v1/bootstrap/tenant",
+            json={"tenant_id": tenant_id, "name": "Test Tenant"},
+        )
+        assert bootstrap.status_code == 200
+
     register_payload: dict[str, object] = {
         "tenant_id": tenant_id,
         "email": email,

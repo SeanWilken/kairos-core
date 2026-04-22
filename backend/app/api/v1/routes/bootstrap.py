@@ -5,9 +5,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from app.core.config import get_settings
 from app.core.onboarding_store import onboarding_store
 from app.core.request_context import require_request_scope
 from app.core.response import ok_response
+from app.core.tenant_store import tenant_store
 
 router = APIRouter(tags=["bootstrap"])
 
@@ -27,6 +29,67 @@ class BootstrapSessionPatch(BaseModel):
     deployment: dict[str, Any] | None = None
     secrets: dict[str, Any] | None = None
     vector: dict[str, Any] | None = None
+
+
+class TenantBootstrapPayload(BaseModel):
+    tenant_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
+@router.get("/bootstrap/tenant/status")
+def get_bootstrap_tenant_status(request: Request) -> dict[str, Any]:
+    tenants = tenant_store.list_tenants()
+    settings = get_settings()
+    return ok_response(
+        request,
+        data={
+            "single_tenant_mode": settings.single_tenant_mode,
+            "install_tenant_id": settings.install_tenant_id or None,
+            "configured": len(tenants) > 0,
+            "tenant": tenants[0] if tenants else None,
+        },
+    )
+
+
+@router.post("/bootstrap/tenant")
+def bootstrap_tenant(request: Request, payload: TenantBootstrapPayload) -> dict[str, Any]:
+    settings = get_settings()
+    tenants = tenant_store.list_tenants()
+
+    if settings.single_tenant_mode and tenants:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Tenant is already configured for this install.",
+                "details": {"reason_code": "TENANT_ALREADY_CONFIGURED"},
+            },
+        )
+
+    if settings.single_tenant_mode and settings.install_tenant_id:
+        if payload.tenant_id != settings.install_tenant_id:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Tenant ID must match install tenant scope.",
+                    "details": {
+                        "reason_code": "TENANT_SCOPE_FORBIDDEN",
+                        "install_tenant_id": settings.install_tenant_id,
+                    },
+                },
+            )
+
+    existing = tenant_store.get_tenant(tenant_id=payload.tenant_id)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Tenant already exists.",
+                "details": {"reason_code": "TENANT_ALREADY_EXISTS"},
+            },
+        )
+
+    tenant = tenant_store.create_tenant(tenant_id=payload.tenant_id, name=payload.name)
+    return ok_response(request, data=tenant)
 
 
 @router.post("/bootstrap/sessions")

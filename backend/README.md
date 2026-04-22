@@ -39,11 +39,22 @@ docker build -t kairos/core-api:local -f Dockerfile .
 docker run --rm -p 8000:8000 --env-file .env kairos/core-api:local
 ```
 
-Initial SQL migration (draft):
+Apply SQL migrations (repo-root `migrations/` is source of truth):
 
 ```powershell
-psql "$env:DATABASE_URL" -f ../migrations/0001_initial_onboarding.sql
+$migrationDir = "..\migrations"
+Get-ChildItem "$migrationDir\*.sql" |
+  Sort-Object Name |
+  ForEach-Object { psql "$env:DATABASE_URL" -v ON_ERROR_STOP=1 -f $_.FullName }
 ```
+
+Current migration set includes:
+
+- `0001_initial_onboarding.sql`
+- `0002_studio_identity_foundation.sql`
+- `0003_auth_sessions_and_credentials.sql`
+- `0004_collaboration_foundation.sql`
+- `0005_persona_and_chat_runtime.sql`
 
 Run tests:
 

@@ -119,7 +119,7 @@ export function TagInput({ values, onChange, placeholder }: { values: string[]; 
           {values.map((x) => (
             <span key={x} className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 border border-zinc-200 rounded text-xs text-zinc-700">
               {x}
-              <button onClick={() => onChange(values.filter((i) => i !== x))} className="text-zinc-400 hover:text-zinc-700 transition-colors ml-0.5">×</button>
+              <button onClick={() => onChange(values.filter((i) => i !== x))} className="text-zinc-400 hover:text-zinc-700 transition-colors ml-0.5">x</button>
             </span>
           ))}
         </div>

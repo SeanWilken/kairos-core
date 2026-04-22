@@ -21,6 +21,8 @@ class Settings(BaseModel):
     jwt_secret: str
     jwt_access_token_ttl_minutes: int
     jwt_refresh_token_ttl_days: int
+    single_tenant_mode: bool
+    install_tenant_id: str
 
 
 @lru_cache
@@ -45,6 +47,13 @@ def get_settings() -> Settings:
         origin.strip() for origin in raw_cors_origins.split(",") if origin.strip()
     ]
 
+    single_tenant_mode = os.getenv("SINGLE_TENANT_MODE", "true").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
     return Settings(
         app_name=os.getenv("APP_NAME", "kairos-core-backend"),
         app_env=app_env,
@@ -56,4 +65,6 @@ def get_settings() -> Settings:
         jwt_secret=os.getenv("JWT_SECRET", "kairos-local-dev-secret-change-me"),
         jwt_access_token_ttl_minutes=int(os.getenv("JWT_ACCESS_TTL_MINUTES", "15")),
         jwt_refresh_token_ttl_days=int(os.getenv("JWT_REFRESH_TTL_DAYS", "14")),
+        single_tenant_mode=single_tenant_mode,
+        install_tenant_id=os.getenv("INSTALL_TENANT_ID", ""),
     )

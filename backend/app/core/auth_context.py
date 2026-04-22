@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 
 from app.core.security import decode_jwt
+from app.core.tenant_policy import require_existing_tenant, validate_tenant_scope
 
 
 @dataclass
@@ -106,6 +107,9 @@ def require_authentication(request: Request, *, require_org: bool = False) -> Au
                 "details": {"reason_code": "ORG_SCOPE_REQUIRED"},
             },
         )
+
+    validate_tenant_scope(context.tenant_id)
+    require_existing_tenant(context.tenant_id)
 
     request.state.user_id = context.user_id
     request.state.tenant_id = context.tenant_id

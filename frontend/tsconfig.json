@@ -12,9 +12,6 @@
     "jsx": "react-jsx",
     "strict": true,
     "baseUrl": ".",
-    "paths": {
-      "@kairosstack/ui": ["../../kairos-ui/src/index.ts"]
-    }
   },
   "include": ["src"],
   "exclude": ["src/wizard-test.tsx"]

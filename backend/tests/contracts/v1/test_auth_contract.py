@@ -3,8 +3,20 @@ from fastapi.testclient import TestClient
 from app.main import app
 
 
+def _bootstrap_tenant(client: TestClient) -> None:
+    status = client.get("/v1/bootstrap/tenant/status")
+    assert status.status_code == 200
+    if not status.json()["data"]["configured"]:
+        created = client.post(
+            "/v1/bootstrap/tenant",
+            json={"tenant_id": "tenant0", "name": "Tenant Zero"},
+        )
+        assert created.status_code == 200
+
+
 def test_auth_register_login_refresh_me_contract() -> None:
     client = TestClient(app)
+    _bootstrap_tenant(client)
 
     register = client.post(
         "/v1/auth/register",
@@ -61,6 +73,7 @@ def test_auth_register_login_refresh_me_contract() -> None:
 
 def test_auth_login_invalid_password_contract() -> None:
     client = TestClient(app)
+    _bootstrap_tenant(client)
     seed = client.post(
         "/v1/auth/register",
         json={

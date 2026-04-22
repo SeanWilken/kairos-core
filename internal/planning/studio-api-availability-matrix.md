@@ -12,6 +12,11 @@ This document is the current handoff reference for `kairos-studio` integration a
 - `POST /v1/auth/logout` (open)
 - `GET /v1/auth/me` (protected)
 
+### Install bootstrap (single-tenant profile)
+
+- `GET /v1/bootstrap/tenant/status` (open)
+- `POST /v1/bootstrap/tenant` (open, one-time in single-tenant mode)
+
 ### Bootstrap + runtime + ingest
 
 - `POST /v1/bootstrap/sessions`
@@ -34,18 +39,40 @@ This document is the current handoff reference for `kairos-studio` integration a
 - `POST /v1/studio/memberships`
 - `PATCH /v1/studio/memberships/{membership_id}`
 
+### Collaboration foundation (new)
+
+- `POST /v1/studio/divisions`
+- `GET /v1/studio/divisions`
+- `POST /v1/studio/teams`
+- `GET /v1/studio/teams`
+- `POST /v1/studio/teams/{team_id}/memberships`
+- `GET /v1/studio/teams/{team_id}/memberships`
+- `PATCH /v1/studio/team-memberships/{team_membership_id}`
+- `POST /v1/studio/channels`
+- `GET /v1/studio/channels`
+- `POST /v1/studio/channels/{channel_id}/messages`
+- `GET /v1/studio/channels/{channel_id}/messages`
+- `POST /v1/studio/tasks`
+- `GET /v1/studio/tasks`
+- `GET /v1/studio/tasks/{task_id}`
+- `PATCH /v1/studio/tasks/{task_id}`
+- `POST /v1/studio/tasks/{task_id}/assignments`
+
+### Realtime transport (new)
+
+- `WS /v1/realtime/ws?token=<access_jwt>`
+
 Behavior notes:
 
-- Studio routes now require bearer auth and tenant/org scope from JWT claims.
-- Open routes intended for installation/bootstrap: health, system status, auth, and registration.
+- Studio collaboration routes require bearer auth and tenant/org scope from JWT claims.
+- Open routes intended for installation/bootstrap: health, bootstrap tenant status/create, auth register/login/refresh/logout, and system status.
 
 - `POST /v1/studio/users` supports two bootstrapping paths:
   - global admin creation with no org membership required (`is_global_admin=true`)
   - org-scoped user creation with membership assignment
 - `PATCH /v1/studio/memberships/{membership_id}` updates membership role/status for org assignment workflows.
 - Duplicate email in the same tenant returns `409` with `reason_code=STUDIO_USER_EMAIL_EXISTS`.
-- `org_id` can be provided in payload; if omitted, request `X-Org-ID` is used.
-- non-global users without org context return `422` with `reason_code=STUDIO_ORG_REQUIRED_FOR_USER`.
+- `org_id` is resolved from payload/JWT scope; non-global users without org context return `422` with `reason_code=STUDIO_ORG_REQUIRED_FOR_USER`.
 
 ### Interim global-admin bootstrap path (current implementation)
 
@@ -72,10 +99,9 @@ This is temporary and should be replaced by the explicit first-run flow once ava
 
 ### Bootstrap/auth lifecycle
 
-- `GET /v1/bootstrap/status`
+- `GET /v1/bootstrap/status` (still open)
 - `POST /v1/bootstrap/session` nonce challenge variant
 - `POST /v1/bootstrap/global-admin`
-- JWT auth endpoints (`/v1/auth/*`)
 
 ### Membership + access controls
 
@@ -105,6 +131,12 @@ Use split domain roots now (instead of adding more `/v1/studio/*`) to avoid late
 - tools endpoints under `/v1/tools/*`
 - workflows endpoints under `/v1/workflows/*`
 - promotion endpoints under `/v1/promotions/*`
+
+### Collaboration + realtime extensions
+
+- channel moderation and per-channel policy endpoints
+- websocket presence and durable notification feed endpoints
+- team metrics snapshot endpoints
 
 ### Knowledge + API keys + usage
 
@@ -151,4 +183,4 @@ Migration required:
 
 - Use this matrix as source of truth for what can be wired immediately.
 - Treat unresolved endpoints as TODOs in Studio adapters, not runtime assumptions.
-- Keep all requests scoped with `X-Tenant-ID` and `X-Org-ID` until token auth rollout lands.
+- Prefer JWT tenant/org scope for protected routes; headers are no longer the primary auth context.

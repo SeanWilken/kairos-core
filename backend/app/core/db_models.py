@@ -32,6 +32,20 @@ class BootstrapSessionModel(Base):
     )
 
 
+class TenantModel(Base):
+    __tablename__ = "tenants"
+
+    tenant_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+
 class RuntimeCheckRunModel(Base):
     __tablename__ = "runtime_check_runs"
 
@@ -188,3 +202,254 @@ class AuthRefreshTokenModel(Base):
     )
 
     __table_args__ = (UniqueConstraint("token_hash", name="uq_auth_refresh_tokens_hash"),)
+
+
+class StudioDivisionModel(Base):
+    __tablename__ = "studio_divisions"
+
+    division_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "slug", name="uq_studio_divisions_org_slug"),
+    )
+
+
+class StudioTeamModel(Base):
+    __tablename__ = "studio_teams"
+
+    team_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    division_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_divisions.division_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    parent_team_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_teams.team_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    access_mode: Mapped[str] = mapped_column(Text, nullable=False, default="internal")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "slug", name="uq_studio_teams_org_slug"),
+    )
+
+
+class StudioTeamMembershipModel(Base):
+    __tablename__ = "studio_team_memberships"
+
+    team_membership_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    team_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_teams.team_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role: Mapped[str] = mapped_column(Text, nullable=False, default="member")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("team_id", "user_id", name="uq_studio_team_memberships_team_user"),
+    )
+
+
+class StudioChannelModel(Base):
+    __tablename__ = "studio_channels"
+
+    channel_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    team_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_teams.team_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    channel_type: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
+    response_policy: Mapped[str] = mapped_column(Text, nullable=False, default="single_best")
+    auto_respond: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    responder_delay_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    default_persona_id: Mapped[str] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class StudioChannelParticipantModel(Base):
+    __tablename__ = "studio_channel_participants"
+
+    participant_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channels.channel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("channel_id", "user_id", name="uq_studio_channel_participants_channel_user"),
+    )
+
+
+class StudioChannelMessageModel(Base):
+    __tablename__ = "studio_channel_messages"
+
+    message_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channels.channel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sender_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class StudioPersonaModel(Base):
+    __tablename__ = "studio_personas"
+
+    persona_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False, default="organization")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    model_profile: Mapped[str] = mapped_column(Text, nullable=False, default="reasoning-optimized")
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    persona_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "slug", name="uq_studio_personas_org_slug"),
+    )
+
+
+class StudioTaskModel(Base):
+    __tablename__ = "studio_tasks"
+
+    task_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    team_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_teams.team_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="todo")
+    visibility: Mapped[str] = mapped_column(Text, nullable=False, default="team_public")
+    owner_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class StudioTaskAssignmentModel(Base):
+    __tablename__ = "studio_task_assignments"
+
+    assignment_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_tasks.task_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    assignee_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("task_id", "assignee_user_id", name="uq_studio_task_assignments_task_user"),
+    )

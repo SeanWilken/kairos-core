@@ -18,6 +18,7 @@ from app.core.security import (
     verify_password,
 )
 from app.core.studio_store import studio_store
+from app.core.tenant_policy import require_existing_tenant, validate_tenant_scope
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,19 +48,22 @@ class RefreshPayload(BaseModel):
 
 def _resolve_tenant(request: Request, payload_tenant: str | None) -> str:
     if payload_tenant:
-        return payload_tenant
-    header_tenant = request.headers.get("X-Tenant-ID")
-    if header_tenant:
-        return header_tenant
-    if get_settings().app_env == "local":
-        return "tenant-local"
-    raise HTTPException(
-        status_code=422,
-        detail={
-            "message": "Tenant context is required.",
-            "details": {"reason_code": "TENANT_CONTEXT_MISSING"},
-        },
-    )
+        tenant_id = payload_tenant
+    else:
+        tenant_id = request.headers.get("X-Tenant-ID") or ""
+
+    if not tenant_id:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Tenant context is required.",
+                "details": {"reason_code": "TENANT_CONTEXT_MISSING"},
+            },
+        )
+
+    validate_tenant_scope(tenant_id)
+    require_existing_tenant(tenant_id)
+    return tenant_id
 
 
 def _token_pair_for_user(
