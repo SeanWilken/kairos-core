@@ -688,7 +688,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       },
       "post": {
         "tags": [
@@ -729,7 +734,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/v1/studio/organizations/{org_id}": {
@@ -739,6 +749,11 @@
         ],
         "summary": "Get Organization",
         "operationId": "get_organization_v1_studio_organizations__org_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "org_id",
@@ -783,6 +798,11 @@
         ],
         "summary": "Create User",
         "operationId": "create_user_v1_studio_users_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -824,6 +844,11 @@
         ],
         "summary": "List Users",
         "operationId": "list_users_v1_studio_users_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "org_id",
@@ -875,6 +900,11 @@
         ],
         "summary": "Get User",
         "operationId": "get_user_v1_studio_users__user_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "user_id",
@@ -952,7 +982,12 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/v1/studio/memberships/{membership_id}": {
@@ -962,6 +997,11 @@
         ],
         "summary": "Patch Membership",
         "operationId": "patch_membership_v1_studio_memberships__membership_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "membership_id",
@@ -1016,6 +1056,11 @@
         ],
         "summary": "Get Governance Baseline",
         "operationId": "get_governance_baseline_v1_studio_governance_baseline_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "org_id",
@@ -1040,19 +1085,47 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Governance Baseline V1 Studio Governance Baseline Get"
+                  "$ref": "#/components/schemas/Envelope_StudioGovernanceBaselineData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
@@ -1083,24 +1156,57 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Create Invite V1 Studio Invites Post"
+                  "$ref": "#/components/schemas/Envelope_StudioInviteData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/v1/studio/invites/{invite_id}/accept": {
@@ -1110,6 +1216,11 @@
         ],
         "summary": "Accept Invite",
         "operationId": "accept_invite_v1_studio_invites__invite_id__accept_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "invite_id",
@@ -1137,19 +1248,67 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Accept Invite V1 Studio Invites  Invite Id  Accept Post"
+                  "$ref": "#/components/schemas/Envelope_StudioInviteAcceptData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invite or user not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invite not in pending state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Invite expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
@@ -1164,6 +1323,11 @@
         ],
         "summary": "Get Onboarding Status",
         "operationId": "get_onboarding_status_v1_studio_onboarding_status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "org_id",
@@ -1188,19 +1352,37 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Onboarding Status V1 Studio Onboarding Status Get"
+                  "$ref": "#/components/schemas/Envelope_StudioOnboardingData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
@@ -1231,24 +1413,47 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Complete Onboarding V1 Studio Onboarding Complete Post"
+                  "$ref": "#/components/schemas/Envelope_StudioOnboardingData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           }
-        }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
       }
     },
     "/v1/studio/settings": {
@@ -1258,6 +1463,11 @@
         ],
         "summary": "Get Settings",
         "operationId": "get_settings_v1_studio_settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "org_id",
@@ -1282,19 +1492,37 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Get Settings V1 Studio Settings Get"
+                  "$ref": "#/components/schemas/Envelope_StudioOrgSettingsData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
@@ -1307,6 +1535,11 @@
         ],
         "summary": "Patch Settings",
         "operationId": "patch_settings_v1_studio_settings_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1323,19 +1556,37 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Patch Settings V1 Studio Settings Patch"
+                  "$ref": "#/components/schemas/Envelope_StudioOrgSettingsData_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Organization scope forbidden.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Invalid request payload.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Envelope_StudioErrorData_"
                 }
               }
             }
@@ -2823,6 +3074,221 @@
         ],
         "title": "DivisionCreatePayload"
       },
+      "Envelope_StudioErrorData_": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioErrorData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StudioErrorData]"
+      },
+      "Envelope_StudioGovernanceBaselineData_": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioGovernanceBaselineData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StudioGovernanceBaselineData]"
+      },
+      "Envelope_StudioInviteAcceptData_": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioInviteAcceptData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StudioInviteAcceptData]"
+      },
+      "Envelope_StudioInviteData_": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioInviteData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StudioInviteData]"
+      },
+      "Envelope_StudioOnboardingData_": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioOnboardingData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StudioOnboardingData]"
+      },
+      "Envelope_StudioOrgSettingsData_": {
+        "properties": {
+          "meta": {
+            "$ref": "#/components/schemas/Meta"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StudioOrgSettingsData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StudioOrgSettingsData]"
+      },
+      "ErrorBody": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "details": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorBody"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2920,6 +3386,44 @@
           "password"
         ],
         "title": "LoginPayload"
+      },
+      "Meta": {
+        "properties": {
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "spec_version": {
+            "type": "string",
+            "title": "Spec Version"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "correlation_id": {
+            "type": "string",
+            "title": "Correlation Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "service",
+          "version",
+          "spec_version",
+          "environment",
+          "timestamp",
+          "correlation_id"
+        ],
+        "title": "Meta"
       },
       "PersonaCreatePayload": {
         "properties": {
@@ -3177,6 +3681,107 @@
         ],
         "title": "RuntimeChecksRunPayload"
       },
+      "StudioErrorData": {
+        "properties": {},
+        "type": "object",
+        "title": "StudioErrorData"
+      },
+      "StudioGovernanceBaselineData": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "organization": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Organization"
+          },
+          "roles": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "owner",
+                "admin",
+                "member",
+                "viewer"
+              ]
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "policy_modes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "org_only",
+                "cross_team",
+                "open"
+              ]
+            },
+            "type": "array",
+            "title": "Policy Modes"
+          },
+          "settings": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "invite_policy",
+                "channel_policy",
+                "task_visibility_default",
+                "ai_response_policy"
+              ]
+            },
+            "type": "object",
+            "title": "Settings"
+          },
+          "onboarding": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Onboarding"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id",
+          "organization",
+          "roles",
+          "policy_modes",
+          "settings",
+          "onboarding"
+        ],
+        "title": "StudioGovernanceBaselineData"
+      },
+      "StudioInviteAcceptData": {
+        "properties": {
+          "invite": {
+            "$ref": "#/components/schemas/StudioInviteData"
+          },
+          "membership": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Membership"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite",
+          "membership"
+        ],
+        "title": "StudioInviteAcceptData"
+      },
       "StudioInviteAcceptPayload": {
         "properties": {
           "org_id": {
@@ -3188,7 +3793,8 @@
                 "type": "null"
               }
             ],
-            "title": "Org Id"
+            "title": "Org Id",
+            "description": "Optional org context override; must match invite org if provided."
           }
         },
         "type": "object",
@@ -3214,6 +3820,12 @@
           },
           "role": {
             "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "member",
+              "viewer"
+            ],
             "title": "Role",
             "default": "member"
           },
@@ -3231,6 +3843,102 @@
         ],
         "title": "StudioInviteCreatePayload"
       },
+      "StudioInviteData": {
+        "properties": {
+          "invite_id": {
+            "type": "string",
+            "title": "Invite Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "member",
+              "viewer"
+            ],
+            "title": "Role"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "expired",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "invited_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited By User Id"
+          },
+          "accepted_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accepted By User Id"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invite_id",
+          "tenant_id",
+          "org_id",
+          "email",
+          "role",
+          "status",
+          "invited_by_user_id",
+          "accepted_by_user_id",
+          "expires_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudioInviteData"
+      },
       "StudioMembershipCreatePayload": {
         "properties": {
           "org_id": {
@@ -3245,6 +3953,12 @@
           },
           "role": {
             "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "member",
+              "viewer"
+            ],
             "title": "Role",
             "default": "member"
           },
@@ -3266,7 +3980,13 @@
           "role": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "owner",
+                  "admin",
+                  "member",
+                  "viewer"
+                ]
               },
               {
                 "type": "null"
@@ -3320,6 +4040,147 @@
         "type": "object",
         "title": "StudioOnboardingCompletePayload"
       },
+      "StudioOnboardingData": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "completed"
+            ],
+            "title": "Status"
+          },
+          "checklist": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Checklist"
+          },
+          "completed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed By User Id"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "org_id",
+          "status",
+          "checklist",
+          "completed_by_user_id",
+          "completed_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudioOnboardingData"
+      },
+      "StudioOrgSettingsData": {
+        "properties": {
+          "setting_id": {
+            "type": "string",
+            "title": "Setting Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "org_id": {
+            "type": "string",
+            "title": "Org Id"
+          },
+          "settings": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "invite_policy",
+                "channel_policy",
+                "task_visibility_default",
+                "ai_response_policy"
+              ]
+            },
+            "type": "object",
+            "title": "Settings"
+          },
+          "updated_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "setting_id",
+          "tenant_id",
+          "org_id",
+          "settings",
+          "updated_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "StudioOrgSettingsData"
+      },
       "StudioOrgSettingsPatchPayload": {
         "properties": {
           "org_id": {
@@ -3334,9 +4195,36 @@
             "title": "Org Id"
           },
           "settings": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "propertyNames": {
+              "enum": [
+                "invite_policy",
+                "channel_policy",
+                "task_visibility_default",
+                "ai_response_policy"
+              ]
+            },
             "type": "object",
-            "title": "Settings"
+            "title": "Settings",
+            "description": "Merge patch semantics. Provided keys are merged into existing settings; omitted keys remain unchanged.",
+            "examples": [
+              {
+                "ai_response_policy": "single_best",
+                "invite_policy": "admin_only"
+              }
+            ]
           }
         },
         "type": "object",
@@ -3730,6 +4618,12 @@
           "type"
         ],
         "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

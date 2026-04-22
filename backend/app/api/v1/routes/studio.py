@@ -1,16 +1,39 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from app.core.auth_context import require_authentication, require_roles
 from app.core.response import ok_response
+from app.core.schemas import Envelope
 from app.core.studio_store import studio_store
 
-router = APIRouter(prefix="/studio", tags=["studio"])
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _studio_bearer_doc(
+    _: HTTPAuthorizationCredentials | None = Security(bearer_scheme),
+) -> None:
+    return None
+
+
+StudioRole = Literal["owner", "admin", "member", "viewer"]
+InviteStatus = Literal["pending", "accepted", "expired", "cancelled"]
+OnboardingStatus = Literal["pending", "in_progress", "completed"]
+PolicyMode = Literal["org_only", "cross_team", "open"]
+SettingsKey = Literal[
+    "invite_policy",
+    "channel_policy",
+    "task_visibility_default",
+    "ai_response_policy",
+]
+
+
+router = APIRouter(prefix="/studio", tags=["studio"], dependencies=[Depends(_studio_bearer_doc)])
 
 
 class StudioOrganizationCreatePayload(BaseModel):
@@ -34,34 +57,105 @@ class StudioUserCreatePayload(BaseModel):
 class StudioMembershipCreatePayload(BaseModel):
     org_id: str = Field(min_length=1)
     user_id: str = Field(min_length=1)
-    role: str = "member"
+    role: StudioRole = "member"
     status: str = "active"
 
 
 class StudioMembershipPatchPayload(BaseModel):
-    role: str | None = None
+    role: StudioRole | None = None
     status: str | None = None
 
 
 class StudioInviteCreatePayload(BaseModel):
     org_id: str | None = None
     email: str = Field(min_length=3)
-    role: str = "member"
+    role: StudioRole = "member"
     expires_in_days: int = Field(default=7, ge=1, le=30)
 
 
 class StudioInviteAcceptPayload(BaseModel):
-    org_id: str | None = None
+    org_id: str | None = Field(
+        default=None,
+        description="Optional org context override; must match invite org if provided.",
+    )
 
 
 class StudioOrgSettingsPatchPayload(BaseModel):
     org_id: str | None = None
-    settings: dict[str, Any] = Field(default_factory=dict)
+    settings: dict[SettingsKey, str | bool | int] = Field(
+        default_factory=dict,
+        description=(
+            "Merge patch semantics. Provided keys are merged into existing settings; "
+            "omitted keys remain unchanged."
+        ),
+        examples=[{"invite_policy": "admin_only", "ai_response_policy": "single_best"}],
+    )
 
 
 class StudioOnboardingCompletePayload(BaseModel):
     org_id: str | None = None
     checklist: dict[str, bool] | None = None
+
+
+class StudioErrorData(BaseModel):
+    pass
+
+
+class StudioGovernanceBaselineData(BaseModel):
+    org_id: str
+    organization: dict[str, Any]
+    roles: list[StudioRole]
+    policy_modes: list[PolicyMode]
+    settings: dict[SettingsKey, str | bool | int]
+    onboarding: dict[str, Any]
+
+
+class StudioInviteData(BaseModel):
+    invite_id: str
+    tenant_id: str
+    org_id: str
+    email: str
+    role: StudioRole
+    status: InviteStatus
+    invited_by_user_id: str | None
+    accepted_by_user_id: str | None
+    expires_at: str | None
+    created_at: str
+    updated_at: str
+
+
+class StudioInviteAcceptData(BaseModel):
+    invite: StudioInviteData
+    membership: dict[str, Any]
+
+
+class StudioOnboardingData(BaseModel):
+    tenant_id: str
+    org_id: str
+    status: OnboardingStatus
+    checklist: dict[str, bool]
+    completed_by_user_id: str | None
+    completed_at: str | None
+    created_at: str
+    updated_at: str
+
+
+class StudioOrgSettingsData(BaseModel):
+    setting_id: str
+    tenant_id: str
+    org_id: str
+    settings: dict[SettingsKey, str | bool | int]
+    updated_by_user_id: str | None
+    created_at: str
+    updated_at: str
+
+
+StudioErrorEnvelope = Envelope[StudioErrorData]
+_governance_common_responses = {
+    401: {"model": StudioErrorEnvelope, "description": "Authentication required."},
+    403: {"model": StudioErrorEnvelope, "description": "Organization scope forbidden."},
+    422: {"model": StudioErrorEnvelope, "description": "Invalid request payload."},
+}
 
 
 def _enforce_org_scope(
@@ -317,7 +411,14 @@ def patch_membership(
     return ok_response(request, data=membership)
 
 
-@router.get("/governance/baseline")
+@router.get(
+    "/governance/baseline",
+    response_model=Envelope[StudioGovernanceBaselineData],
+    responses={
+        **_governance_common_responses,
+        404: {"model": StudioErrorEnvelope, "description": "Organization not found."},
+    },
+)
 def get_governance_baseline(request: Request, org_id: str | None = Query(default=None)) -> dict[str, Any]:
     auth = require_authentication(request)
     target_org_id = _resolve_target_org_id(request, auth.org_id, org_id)
@@ -348,7 +449,14 @@ def get_governance_baseline(request: Request, org_id: str | None = Query(default
     )
 
 
-@router.post("/invites")
+@router.post(
+    "/invites",
+    response_model=Envelope[StudioInviteData],
+    responses={
+        **_governance_common_responses,
+        404: {"model": StudioErrorEnvelope, "description": "Organization not found."},
+    },
+)
 def create_invite(request: Request, payload: StudioInviteCreatePayload) -> dict[str, Any]:
     auth = require_authentication(request)
     require_roles(auth, {"owner", "admin"})
@@ -377,7 +485,16 @@ def create_invite(request: Request, payload: StudioInviteCreatePayload) -> dict[
     return ok_response(request, data=invite)
 
 
-@router.post("/invites/{invite_id}/accept")
+@router.post(
+    "/invites/{invite_id}/accept",
+    response_model=Envelope[StudioInviteAcceptData],
+    responses={
+        **_governance_common_responses,
+        404: {"model": StudioErrorEnvelope, "description": "Invite or user not found."},
+        409: {"model": StudioErrorEnvelope, "description": "Invite not in pending state."},
+        410: {"model": StudioErrorEnvelope, "description": "Invite expired."},
+    },
+)
 def accept_invite(request: Request, invite_id: str, payload: StudioInviteAcceptPayload) -> dict[str, Any]:
     auth = require_authentication(request)
 
@@ -479,7 +596,11 @@ def accept_invite(request: Request, invite_id: str, payload: StudioInviteAcceptP
     return ok_response(request, data={"invite": accepted_invite, "membership": membership})
 
 
-@router.get("/onboarding/status")
+@router.get(
+    "/onboarding/status",
+    response_model=Envelope[StudioOnboardingData],
+    responses=_governance_common_responses,
+)
 def get_onboarding_status(request: Request, org_id: str | None = Query(default=None)) -> dict[str, Any]:
     auth = require_authentication(request)
     target_org_id = _resolve_target_org_id(request, auth.org_id, org_id)
@@ -488,7 +609,11 @@ def get_onboarding_status(request: Request, org_id: str | None = Query(default=N
     return ok_response(request, data=onboarding)
 
 
-@router.post("/onboarding/complete")
+@router.post(
+    "/onboarding/complete",
+    response_model=Envelope[StudioOnboardingData],
+    responses=_governance_common_responses,
+)
 def complete_onboarding(request: Request, payload: StudioOnboardingCompletePayload) -> dict[str, Any]:
     auth = require_authentication(request)
     require_roles(auth, {"owner", "admin"})
@@ -503,7 +628,11 @@ def complete_onboarding(request: Request, payload: StudioOnboardingCompletePaylo
     return ok_response(request, data=onboarding)
 
 
-@router.get("/settings")
+@router.get(
+    "/settings",
+    response_model=Envelope[StudioOrgSettingsData],
+    responses=_governance_common_responses,
+)
 def get_settings(request: Request, org_id: str | None = Query(default=None)) -> dict[str, Any]:
     auth = require_authentication(request)
     target_org_id = _resolve_target_org_id(request, auth.org_id, org_id)
@@ -512,7 +641,11 @@ def get_settings(request: Request, org_id: str | None = Query(default=None)) -> 
     return ok_response(request, data=settings)
 
 
-@router.patch("/settings")
+@router.patch(
+    "/settings",
+    response_model=Envelope[StudioOrgSettingsData],
+    responses=_governance_common_responses,
+)
 def patch_settings(request: Request, payload: StudioOrgSettingsPatchPayload) -> dict[str, Any]:
     auth = require_authentication(request)
     require_roles(auth, {"owner", "admin"})

@@ -57,3 +57,5 @@ Apply these in order from repo-root `migrations/`:
 
 - In local development with persistent DB volumes, apply migrations manually; container init scripts are one-time at first DB initialization.
 - This release intentionally prioritizes Studio integration velocity; governance voting/approval workflows remain a later phase.
+- `PATCH /v1/studio/settings` uses merge semantics: only provided keys are updated, omitted keys are preserved.
+- `POST /v1/studio/invites/{invite_id}/accept` currently uses authenticated-user email matching; invite-token redemption flow is a planned follow-up when email delivery is integrated.

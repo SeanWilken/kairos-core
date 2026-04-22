@@ -105,3 +105,98 @@ def test_studio_onboarding_complete_contract() -> None:
     status_body = status_response.json()
     assert status_body["data"]["status"] == "completed"
     assert status_body["data"]["checklist"]["members_invited"] is True
+
+
+def test_studio_governance_baseline_not_found_contract() -> None:
+    client = TestClient(app)
+    headers = register_and_login(client, email="gov.notfound@kairos.dev")
+
+    response = client.get("/v1/studio/governance/baseline?org_id=missing-org", headers=headers)
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"]["details"]["reason_code"] == "STUDIO_ORG_NOT_FOUND"
+
+
+def test_studio_invite_create_not_found_contract() -> None:
+    client = TestClient(app)
+    headers = register_and_login(client, email="invite.notfound@kairos.dev")
+
+    response = client.post(
+        "/v1/studio/invites",
+        headers=headers,
+        json={"org_id": "missing-org", "email": "person@kairos.dev", "role": "member"},
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"]["details"]["reason_code"] == "STUDIO_ORG_NOT_FOUND"
+
+
+def test_studio_invite_accept_email_mismatch_contract() -> None:
+    client = TestClient(app)
+    owner_headers = register_and_login(client, email="invite.owner2@kairos.dev")
+
+    org_response = client.post(
+        "/v1/studio/organizations",
+        headers=owner_headers,
+        json={"name": "Invite Mismatch Org", "slug": "invite-mismatch-org", "mode": "team"},
+    )
+    assert org_response.status_code == 200
+    org_id = org_response.json()["data"]["org_id"]
+
+    invite_response = client.post(
+        "/v1/studio/invites",
+        headers=owner_headers,
+        json={"org_id": org_id, "email": "expected.member@kairos.dev", "role": "member"},
+    )
+    assert invite_response.status_code == 200
+    invite_id = invite_response.json()["data"]["invite_id"]
+
+    mismatched_headers = register_and_login(client, email="different.member@kairos.dev")
+    accept_response = client.post(
+        f"/v1/studio/invites/{invite_id}/accept",
+        headers=mismatched_headers,
+        json={"org_id": org_id},
+    )
+
+    assert accept_response.status_code == 403
+    body = accept_response.json()
+    assert body["error"]["details"]["reason_code"] == "STUDIO_INVITE_EMAIL_MISMATCH"
+
+
+def test_studio_onboarding_status_requires_org_context_contract() -> None:
+    client = TestClient(app)
+    headers = register_and_login(client, email="onboarding.noorg@kairos.dev")
+
+    response = client.get("/v1/studio/onboarding/status", headers=headers)
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["details"]["reason_code"] == "STUDIO_ORG_REQUIRED"
+
+
+def test_studio_onboarding_complete_requires_org_context_contract() -> None:
+    client = TestClient(app)
+    headers = register_and_login(client, email="onboarding.complete.noorg@kairos.dev")
+
+    response = client.post("/v1/studio/onboarding/complete", headers=headers, json={"checklist": {}})
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["details"]["reason_code"] == "STUDIO_ORG_REQUIRED"
+
+
+def test_studio_settings_patch_requires_org_context_contract() -> None:
+    client = TestClient(app)
+    headers = register_and_login(client, email="settings.noorg@kairos.dev")
+
+    response = client.patch(
+        "/v1/studio/settings",
+        headers=headers,
+        json={"settings": {"invite_policy": "admin_only"}},
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["error"]["details"]["reason_code"] == "STUDIO_ORG_REQUIRED"
