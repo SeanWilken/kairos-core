@@ -62,6 +62,16 @@ This document is the current handoff reference for `kairos-studio` integration a
 
 - `WS /v1/realtime/ws?token=<access_jwt>`
 
+### Governance foundation (new)
+
+- `GET /v1/studio/governance/baseline`
+- `POST /v1/studio/invites`
+- `POST /v1/studio/invites/{invite_id}/accept`
+- `GET /v1/studio/onboarding/status`
+- `POST /v1/studio/onboarding/complete`
+- `GET /v1/studio/settings`
+- `PATCH /v1/studio/settings`
+
 Behavior notes:
 
 - Studio collaboration routes require bearer auth and tenant/org scope from JWT claims.
@@ -174,10 +184,25 @@ Use split domain roots now (instead of adding more `/v1/studio/*`) to avoid late
 - `studio_users`
 - `studio_organizations`
 - `studio_org_memberships`
+- `studio_divisions`
+- `studio_teams`
+- `studio_team_memberships`
+- `studio_channels`
+- `studio_channel_participants`
+- `studio_channel_messages`
+- `studio_personas`
+- `studio_tasks`
+- `studio_task_assignments`
+- `studio_org_invites`
+- `studio_org_settings`
+- `studio_org_onboarding`
 
 Migration required:
 
 - `migrations/0002_studio_identity_foundation.sql`
+- `migrations/0004_collaboration_foundation.sql`
+- `migrations/0005_persona_and_chat_runtime.sql`
+- `migrations/0006_studio_governance_foundation.sql`
 
 ## Studio integration guidance
 

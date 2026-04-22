@@ -55,6 +55,7 @@ Current migration set includes:
 - `0003_auth_sessions_and_credentials.sql`
 - `0004_collaboration_foundation.sql`
 - `0005_persona_and_chat_runtime.sql`
+- `0006_studio_governance_foundation.sql`
 
 Run tests:
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -8,6 +9,9 @@ from sqlalchemy import select
 
 from app.core.db import SessionLocal
 from app.core.db_models import (
+    StudioOrgInviteModel,
+    StudioOrgOnboardingModel,
+    StudioOrgSettingModel,
     StudioOrganizationMembershipModel,
     StudioOrganizationModel,
     StudioUserModel,
@@ -55,6 +59,44 @@ class StudioStore:
             "slug": model.slug,
             "mode": model.mode,
             "owner_user_id": model.owner_user_id,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_invite_dict(self, model: StudioOrgInviteModel) -> dict[str, Any]:
+        return {
+            "invite_id": model.invite_id,
+            "tenant_id": model.tenant_id,
+            "org_id": model.org_id,
+            "email": model.email,
+            "role": model.role,
+            "status": model.status,
+            "invited_by_user_id": model.invited_by_user_id,
+            "accepted_by_user_id": model.accepted_by_user_id,
+            "expires_at": _dt_iso(model.expires_at) if model.expires_at else None,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_org_settings_dict(self, model: StudioOrgSettingModel) -> dict[str, Any]:
+        return {
+            "setting_id": model.setting_id,
+            "tenant_id": model.tenant_id,
+            "org_id": model.org_id,
+            "settings": json.loads(model.settings_json or "{}"),
+            "updated_by_user_id": model.updated_by_user_id,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_onboarding_dict(self, model: StudioOrgOnboardingModel) -> dict[str, Any]:
+        return {
+            "tenant_id": model.tenant_id,
+            "org_id": model.org_id,
+            "status": model.status,
+            "checklist": json.loads(model.checklist_json or "{}"),
+            "completed_by_user_id": model.completed_by_user_id,
+            "completed_at": _dt_iso(model.completed_at) if model.completed_at else None,
             "created_at": _dt_iso(model.created_at),
             "updated_at": _dt_iso(model.updated_at),
         }
@@ -304,6 +346,211 @@ class StudioStore:
             if model is None:
                 return None
             return self._to_org_dict(model)
+
+    def create_org_invite(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        email: str,
+        role: str,
+        invited_by_user_id: str,
+        expires_at: datetime | None,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        invite_id = str(uuid4())
+
+        with SessionLocal() as db:
+            model = StudioOrgInviteModel(
+                invite_id=invite_id,
+                tenant_id=tenant_id,
+                org_id=org_id,
+                email=email,
+                role=role,
+                status="pending",
+                invited_by_user_id=invited_by_user_id,
+                accepted_by_user_id=None,
+                expires_at=expires_at,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(model)
+            db.commit()
+            db.refresh(model)
+            return self._to_invite_dict(model)
+
+    def get_org_invite(self, *, tenant_id: str, invite_id: str) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(StudioOrgInviteModel).where(
+                    StudioOrgInviteModel.tenant_id == tenant_id,
+                    StudioOrgInviteModel.invite_id == invite_id,
+                )
+            )
+            if model is None:
+                return None
+            return self._to_invite_dict(model)
+
+    def accept_org_invite(
+        self,
+        *,
+        tenant_id: str,
+        invite_id: str,
+        accepted_by_user_id: str,
+    ) -> dict[str, Any] | None:
+        now = datetime.now(timezone.utc)
+
+        with SessionLocal() as db:
+            invite = db.scalar(
+                select(StudioOrgInviteModel).where(
+                    StudioOrgInviteModel.tenant_id == tenant_id,
+                    StudioOrgInviteModel.invite_id == invite_id,
+                )
+            )
+            if invite is None:
+                return None
+
+            invite.status = "accepted"
+            invite.accepted_by_user_id = accepted_by_user_id
+            invite.updated_at = now
+            db.add(invite)
+            db.commit()
+            db.refresh(invite)
+            return self._to_invite_dict(invite)
+
+    def get_org_settings(self, *, tenant_id: str, org_id: str) -> dict[str, Any]:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(StudioOrgSettingModel).where(
+                    StudioOrgSettingModel.tenant_id == tenant_id,
+                    StudioOrgSettingModel.org_id == org_id,
+                )
+            )
+            if model is None:
+                now = datetime.now(timezone.utc)
+                model = StudioOrgSettingModel(
+                    setting_id=str(uuid4()),
+                    tenant_id=tenant_id,
+                    org_id=org_id,
+                    settings_json="{}",
+                    updated_by_user_id=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(model)
+                db.commit()
+                db.refresh(model)
+            return self._to_org_settings_dict(model)
+
+    def update_org_settings(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        patch: dict[str, Any],
+        updated_by_user_id: str,
+    ) -> dict[str, Any]:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(StudioOrgSettingModel).where(
+                    StudioOrgSettingModel.tenant_id == tenant_id,
+                    StudioOrgSettingModel.org_id == org_id,
+                )
+            )
+            now = datetime.now(timezone.utc)
+            if model is None:
+                model = StudioOrgSettingModel(
+                    setting_id=str(uuid4()),
+                    tenant_id=tenant_id,
+                    org_id=org_id,
+                    settings_json="{}",
+                    updated_by_user_id=updated_by_user_id,
+                    created_at=now,
+                    updated_at=now,
+                )
+
+            current = json.loads(model.settings_json or "{}")
+            current.update(patch)
+            model.settings_json = json.dumps(current)
+            model.updated_by_user_id = updated_by_user_id
+            model.updated_at = now
+            db.add(model)
+            db.commit()
+            db.refresh(model)
+            return self._to_org_settings_dict(model)
+
+    def get_org_onboarding(self, *, tenant_id: str, org_id: str) -> dict[str, Any]:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(StudioOrgOnboardingModel).where(
+                    StudioOrgOnboardingModel.tenant_id == tenant_id,
+                    StudioOrgOnboardingModel.org_id == org_id,
+                )
+            )
+            if model is None:
+                now = datetime.now(timezone.utc)
+                model = StudioOrgOnboardingModel(
+                    tenant_id=tenant_id,
+                    org_id=org_id,
+                    status="pending",
+                    checklist_json=json.dumps(
+                        {
+                            "organization_created": True,
+                            "members_invited": False,
+                            "settings_reviewed": False,
+                            "persona_configured": False,
+                        }
+                    ),
+                    completed_by_user_id=None,
+                    completed_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(model)
+                db.commit()
+                db.refresh(model)
+            return self._to_onboarding_dict(model)
+
+    def complete_org_onboarding(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        completed_by_user_id: str,
+        checklist_patch: dict[str, bool] | None = None,
+    ) -> dict[str, Any]:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(StudioOrgOnboardingModel).where(
+                    StudioOrgOnboardingModel.tenant_id == tenant_id,
+                    StudioOrgOnboardingModel.org_id == org_id,
+                )
+            )
+            now = datetime.now(timezone.utc)
+            if model is None:
+                model = StudioOrgOnboardingModel(
+                    tenant_id=tenant_id,
+                    org_id=org_id,
+                    status="pending",
+                    checklist_json="{}",
+                    completed_by_user_id=None,
+                    completed_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+
+            checklist = json.loads(model.checklist_json or "{}")
+            if checklist_patch:
+                checklist.update(checklist_patch)
+            model.checklist_json = json.dumps(checklist)
+            model.status = "completed"
+            model.completed_by_user_id = completed_by_user_id
+            model.completed_at = now
+            model.updated_at = now
+            db.add(model)
+            db.commit()
+            db.refresh(model)
+            return self._to_onboarding_dict(model)
 
 
 studio_store = StudioStore()

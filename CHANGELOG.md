@@ -7,6 +7,7 @@ The format is based on Keep a Changelog.
 ## [Unreleased]
 
 - Added single-tenant bootstrap/auth foundations plus Studio collaboration, realtime websocket, and persona-chat API/runtime primitives with new migrations and contract tests.
+- Added Studio governance foundation endpoints for baseline policy, invites, onboarding status/complete, and organization settings.
 - API endpoints added for: organization, auth, bootstrap and membership POC w/ tests
 - Scaffolded backend response envelope conventions and v1 health endpoint.
 - Added contract/unit/integration test layout and baseline tests.

@@ -453,3 +453,78 @@ class StudioTaskAssignmentModel(Base):
     __table_args__ = (
         UniqueConstraint("task_id", "assignee_user_id", name="uq_studio_task_assignments_task_user"),
     )
+
+
+class StudioOrgInviteModel(Base):
+    __tablename__ = "studio_org_invites"
+
+    invite_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    email: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, default="member")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    invited_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    accepted_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class StudioOrgSettingModel(Base):
+    __tablename__ = "studio_org_settings"
+
+    setting_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    settings_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    updated_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", name="uq_studio_org_settings_org"),
+    )
+
+
+class StudioOrgOnboardingModel(Base):
+    __tablename__ = "studio_org_onboarding"
+
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    checklist_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    completed_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
