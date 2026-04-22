@@ -60,6 +60,17 @@ The format is based on Keep a Changelog.
 - Added initial Core onboarding endpoints for bootstrap sessions, runtime status/check execution, and ingest job lifecycle with v1 envelope responses and tenant/org scope enforcement.
 - Added in-memory onboarding store and contract tests for `bootstrap`, `system`, and `ingest` endpoint flows, including ingest precondition gating on runtime checks.
 
+## [PR 2 - Core Bootstrap + Studio Runtime Foundation]
+
+- Added single-tenant tenant bootstrap endpoints and policy enforcement (`GET/POST /v1/bootstrap/tenant*`) to support first-install tenant provisioning.
+- Added auth lifecycle endpoints and JWT/refresh token persistence (`/v1/auth/register|login|refresh|logout|me`) with protected route enforcement.
+- Added Studio collaboration APIs for divisions, teams, memberships, channels/messages, and tasks with contract coverage.
+- Added realtime websocket transport (`WS /v1/realtime/ws`) with chat send/typing flows and delayed `single_best` assistant response orchestration.
+- Added persona/chat runtime primitives including OpenAI-compatible provider adapter, persona prompt compiler, and metadata-enriched assistant message persistence.
+- Added Studio governance onboarding APIs for baseline policy readout, invite create/accept, onboarding status/complete, and org settings (`/v1/studio/governance/*`, `/v1/studio/invites*`, `/v1/studio/onboarding/*`, `/v1/studio/settings`).
+- Added and documented migrations `0004_collaboration_foundation.sql`, `0005_persona_and_chat_runtime.sql`, and `0006_studio_governance_foundation.sql`.
+- Updated Studio API availability planning docs and backend migration guidance to align Studio onboarding integration with current backend capabilities.
+
 ## [PR 1 - Governance Baseline]
 
 - Added simple v1 protected scope baseline with tenant/org request-context enforcement, structured access-denied error reasons, protected route contract/integration tests, compatibility notes, and updated OpenAPI snapshot.
