@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/studio-tool-integration.schema.json",
+  "title": "StudioToolIntegration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "tool_id", "org_id", "name", "category", "auth", "connection", "policy", "created_at", "updated_at"],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "tool_id": { "type": "string", "minLength": 1 },
+    "org_id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "category": { "type": "string", "enum": ["api", "database", "filesystem", "email", "calendar", "custom"] },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "secret_refs"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["oauth", "api_key", "service_account", "none"] },
+        "secret_refs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_url", "health_endpoint"],
+      "properties": {
+        "base_url": { "type": "string" },
+        "health_endpoint": { "type": "string" },
+        "timeout_ms": { "type": "integer", "minimum": 100 }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approval_mode"],
+      "properties": {
+        "approval_mode": { "type": "string", "enum": ["auto", "manual", "restricted"] },
+        "allowed_persona_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.1/bootstrap-target-capabilities.schema.json",
+  "title": "BootstrapTargetCapabilities",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "maturity",
+    "tested",
+    "allowed_execution_modes",
+    "artifact_types",
+    "disclaimer",
+    "spec_version"
+  ],
+  "properties": {
+    "target": {
+      "type": "string",
+      "enum": ["docker_local", "github_actions", "k8s", "terraform"]
+    },
+    "maturity": {
+      "type": "string",
+      "enum": ["mvp", "experimental", "planned"]
+    },
+    "tested": { "type": "boolean" },
+    "allowed_execution_modes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["generate_only", "attempt_automated"]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "artifact_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          ".env.template",
+          "docker-compose.yml",
+          "nginx.conf",
+          "github-actions-snippet.yml",
+          "k8s-manifests.yaml",
+          "terraform.tfvars.example",
+          "bootstrap-report.json"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "disclaimer": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "spec_version": { "type": "string", "const": "v0.1" }
+  }
+}

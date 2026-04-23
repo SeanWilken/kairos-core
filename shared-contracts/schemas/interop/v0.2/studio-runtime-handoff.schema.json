@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/studio-runtime-handoff.schema.json",
+  "title": "StudioRuntimeHandoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_version",
+    "handoff_id",
+    "session_id",
+    "tenant_id",
+    "org_id",
+    "environment",
+    "runtime",
+    "deployment",
+    "secrets",
+    "vector",
+    "readiness",
+    "created_at"
+  ],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "handoff_id": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string", "minLength": 1 },
+    "tenant_id": { "type": "string", "minLength": 1 },
+    "org_id": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string", "enum": ["development", "staging", "production"] },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_url", "connections"],
+      "properties": {
+        "base_url": { "type": "string", "format": "uri" },
+        "connections": { "type": "array", "items": { "type": "object" }, "minItems": 1 }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "execution_mode", "components"],
+      "properties": {
+        "target": { "type": "string" },
+        "execution_mode": { "type": "string" },
+        "components": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "storage_target", "required_key_names"],
+      "properties": {
+        "mode": { "type": "string" },
+        "storage_target": { "type": "string" },
+        "required_key_names": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "provider"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["disabled", "enabled"] },
+        "provider": { "type": "string" },
+        "namespace_pattern": { "type": "string" }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime_checks_passed", "docs_ingested"],
+      "properties": {
+        "runtime_checks_passed": { "type": "boolean" },
+        "docs_ingested": { "type": "boolean" },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

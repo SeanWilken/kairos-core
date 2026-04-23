@@ -4,6 +4,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.response import error_response
 
+
 def map_http_exception_code(status_code: int) -> str:
     if status_code == 404:
         return "NOT_FOUND"
@@ -13,9 +14,12 @@ def map_http_exception_code(status_code: int) -> str:
         return "UNAUTHORIZED"
     if status_code == 422:
         return "VALIDATION_ERROR"
+    if status_code == 409:
+        return "PRECONDITION_FAILED"
     if status_code == 500:
         return "INTERNAL_SERVER_ERROR"
     return "HTTP_ERROR"
+
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     if isinstance(exc.detail, str):

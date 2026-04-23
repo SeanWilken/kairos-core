@@ -35,3 +35,5 @@ This directory contains architecture docs and system diagrams for the core train
 
 - `docs/architecture/repo-charter.md`
 - `docs/architecture/ai-governance-and-safety.md`
+- `docs/architecture/core-bootstrap-roadmap.md`
+- `docs/architecture/onboarding-contracts-and-api-draft-v0.2.md`

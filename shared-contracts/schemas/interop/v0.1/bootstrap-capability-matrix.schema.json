@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.1/bootstrap-capability-matrix.schema.json",
+  "title": "BootstrapCapabilityMatrix",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["targets", "spec_version"],
+  "properties": {
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "./bootstrap-target-capabilities.schema.json"
+      }
+    },
+    "spec_version": { "type": "string", "const": "v0.1" }
+  }
+}

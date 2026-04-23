@@ -11,7 +11,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": "."
+    "baseUrl": ".",
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/wizard-test.tsx"]
 }

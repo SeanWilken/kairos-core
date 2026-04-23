@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/onboarding-contract-catalog.schema.json",
+  "title": "OnboardingContractCatalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["spec_version", "contracts"],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["domain", "schema_ref", "owner_repo", "phase"],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "enum": [
+              "onboarding_bootstrap_session",
+              "onboarding_runtime_status",
+              "onboarding_ingest_job",
+              "bootstrap_local_env_input",
+              "studio_runtime_handoff",
+              "studio_organization_config",
+              "studio_persona_profile",
+              "studio_tool_integration",
+              "studio_workflow_definition",
+              "studio_environment_promotion"
+            ]
+          },
+          "schema_ref": { "type": "string", "minLength": 1 },
+          "owner_repo": { "type": "string", "enum": ["kairos-core", "kairos-studio", "shared"] },
+          "phase": { "type": "string", "enum": ["core_bootstrap", "local_generation", "studio_configuration", "promotion"] }
+        }
+      }
+    }
+  }
+}

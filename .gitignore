@@ -27,5 +27,13 @@ coverage/
 *.log
 tmp/
 
+!kairos-stack/
+kairos-stack/*
 labs/
 internal/
+!internal/
+internal/*
+!internal/planning/
+internal/planning/*
+!internal/planning/studio-api-availability-matrix.md
+!internal/planning/studio-intial-api-proposal.md

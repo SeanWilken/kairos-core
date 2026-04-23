@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kairos.dev/schemas/interop/v0.2/bootstrap-local-env-input.schema.json",
+  "title": "BootstrapLocalEnvInput",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "spec_version",
+    "session_id",
+    "target",
+    "database",
+    "provider",
+    "local_only"
+  ],
+  "properties": {
+    "spec_version": { "type": "string", "const": "v0.2" },
+    "session_id": { "type": "string", "minLength": 1 },
+    "target": { "type": "string", "enum": ["docker_local"] },
+    "local_only": {
+      "type": "boolean",
+      "const": true,
+      "description": "This payload is for local generation only and must never be transmitted to server endpoints."
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connection_mode",
+        "deployment_location",
+        "host",
+        "port",
+        "database_name",
+        "username",
+        "password",
+        "password_source"
+      ],
+      "properties": {
+        "connection_mode": { "type": "string", "enum": ["existing", "new"] },
+        "deployment_location": { "type": "string", "enum": ["local", "remote"] },
+        "host": { "type": "string", "minLength": 1, "default": "localhost" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 5432 },
+        "database_name": { "type": "string", "minLength": 1, "default": "kairos" },
+        "username": { "type": "string", "minLength": 1, "default": "kairos" },
+        "password": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Transient local value. Must only be written to local generated env files by user choice."
+        },
+        "password_source": { "type": "string", "enum": ["user_input", "generated_default"] },
+        "ssl_mode": {
+          "type": "string",
+          "enum": ["disable", "prefer", "require", "verify-ca", "verify-full"],
+          "default": "prefer"
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "provider", "endpoint", "model_ref"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["api_provider", "local_model"] },
+        "provider": { "type": "string", "enum": ["openai", "anthropic", "custom"], "default": "openai" },
+        "endpoint": { "type": "string", "default": "https://api.openai.com/v1" },
+        "model_ref": { "type": "string", "default": "gpt-4o-mini" },
+        "api_key": {
+          "type": "string",
+          "description": "Transient local value. Never persisted to server contracts."
+        }
+      }
+    },
+    "vector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "enum": ["pgvector"] },
+        "namespace": { "type": "string", "default": "tenant_default" }
+      }
+    }
+  }
+}
