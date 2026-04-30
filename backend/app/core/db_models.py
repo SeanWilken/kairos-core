@@ -385,6 +385,13 @@ class StudioPersonaModel(Base):
     model_profile: Mapped[str] = mapped_column(Text, nullable=False, default="reasoning-optimized")
     system_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
     persona_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    approval_status: Mapped[str] = mapped_column(Text, nullable=False, default="draft")
+    approved_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_by_user_id: Mapped[str] = mapped_column(
         Text,
         ForeignKey("studio_users.user_id", ondelete="SET NULL"),
@@ -452,6 +459,294 @@ class StudioTaskAssignmentModel(Base):
 
     __table_args__ = (
         UniqueConstraint("task_id", "assignee_user_id", name="uq_studio_task_assignments_task_user"),
+    )
+
+
+class PersonaTemplateCategoryModel(Base):
+    __tablename__ = "persona_template_categories"
+
+    category_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_persona_template_categories_tenant_name"),)
+
+
+class PersonaTemplateOptionModel(Base):
+    __tablename__ = "persona_template_options"
+
+    option_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    category_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("persona_template_categories.category_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    key: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    verbose_statement: Mapped[str] = mapped_column(Text, nullable=False)
+    provider_compatibility_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("category_id", "key", name="uq_persona_template_options_category_key"),
+    )
+
+
+class PromptPrefabModel(Base):
+    __tablename__ = "prompt_prefabs"
+
+    prefab_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    industry: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    segment_type: Mapped[str] = mapped_column(Text, nullable=False)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    variables_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    tokens_estimate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "industry",
+            "role",
+            "segment_type",
+            "version",
+            name="uq_prompt_prefabs_tenant_industry_role_segment",
+        ),
+    )
+
+
+class PromptCatalogBundleModel(Base):
+    __tablename__ = "prompt_catalog_bundles"
+
+    bundle_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    bundle_version: Mapped[str] = mapped_column(Text, nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[str] = mapped_column(Text, nullable=False, default="v1")
+    signature_alg: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    signature_key_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    signature_value: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    imported_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "bundle_id", name="uq_prompt_catalog_bundles_tenant_bundle"),
+    )
+
+
+class PersonaVersionModel(Base):
+    __tablename__ = "persona_versions"
+
+    version_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    persona_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_personas.persona_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_major: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    version_minor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    version_patch: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    version_string: Mapped[str] = mapped_column(Text, nullable=False)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    generated_prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    change_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "persona_id",
+            "version_major",
+            "version_minor",
+            "version_patch",
+            name="uq_persona_versions_persona_version",
+        ),
+    )
+
+
+class PersonaVersionHistoryModel(Base):
+    __tablename__ = "persona_version_history"
+
+    history_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    version_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("persona_versions.version_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    field_name: Mapped[str] = mapped_column(Text, nullable=False)
+    old_value: Mapped[str] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str] = mapped_column(Text, nullable=True)
+    changed_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class UserPersonaContextModel(Base):
+    __tablename__ = "user_persona_contexts"
+
+    context_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    persona_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_personas.persona_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_strengths_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    user_weaknesses_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    autonomy_level: Mapped[str] = mapped_column(Text, nullable=False, default="moderate")
+    communication_preference: Mapped[str] = mapped_column(Text, nullable=False, default="balanced")
+    detail_level: Mapped[str] = mapped_column(Text, nullable=False, default="standard")
+    check_in_frequency: Mapped[str] = mapped_column(Text, nullable=False, default="as_needed")
+    context_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "persona_id", name="uq_user_persona_contexts_user_persona"),
+    )
+
+
+class RoomCouncilConfigModel(Base):
+    __tablename__ = "room_council_config"
+
+    config_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    room_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channels.channel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    council_head_persona_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_personas.persona_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    council_mode: Mapped[str] = mapped_column(Text, nullable=False, default="summarized")
+    delay_before_orchestration_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=10000)
+    show_reasoning_metadata: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allow_parallel_responses: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (UniqueConstraint("room_id", name="uq_room_council_config_room"),)
+
+
+class RoomPersonaModel(Base):
+    __tablename__ = "room_personas"
+
+    room_persona_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    room_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channels.channel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    persona_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_personas.persona_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    role_in_room: Mapped[str] = mapped_column(Text, nullable=False, default="member")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (UniqueConstraint("room_id", "persona_id", name="uq_room_personas_room_persona"),)
+
+
+class PackImportQueueModel(Base):
+    __tablename__ = "pack_import_queue"
+
+    queue_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    pack_data_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    extracted_config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    safety_flags_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending_review")
+    review_notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    reviewed_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    installed_persona_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_personas.persona_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PackReviewConversationModel(Base):
+    __tablename__ = "pack_review_conversations"
+
+    conversation_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    queue_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("pack_import_queue.queue_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    test_case_key: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    response: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("queue_id", "test_case_key", name="uq_pack_review_conversations_queue_case"),
     )
 
 

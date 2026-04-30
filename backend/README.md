@@ -56,6 +56,13 @@ Current migration set includes:
 - `0004_collaboration_foundation.sql`
 - `0005_persona_and_chat_runtime.sql`
 - `0006_studio_governance_foundation.sql`
+- `0007_persona_template_options.sql`
+- `0008_persona_versioning.sql`
+- `0009_prompt_prefabs.sql`
+- `0010_user_persona_context.sql`
+- `0011_room_council_config.sql`
+- `0012_prompt_catalog_governance.sql`
+- `0013_pack_review_workflow.sql`
 
 Run tests:
 

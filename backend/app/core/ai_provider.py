@@ -29,6 +29,62 @@ def _profile_to_model(profile: str) -> str:
     return profile_map.get(profile, os.getenv("LLM_MODEL", "gpt-4o-mini"))
 
 
+def _simulated_response(
+    *,
+    system_prompt: str,
+    conversation_messages: list[dict[str, str]],
+) -> str:
+    last_user_message = ""
+    for message in reversed(conversation_messages):
+        if message.get("role") == "user":
+            last_user_message = str(message.get("content", ""))
+            break
+
+    lowered = last_user_message.lower()
+    if "return valid json" in lowered and all(
+        key in lowered for key in ["introduction", "description", "features", "skills", "resume"]
+    ):
+        persona_name = "Kairos Persona"
+        marker = "you are"
+        lowered_system = system_prompt.lower()
+        if marker in lowered_system:
+            idx = lowered_system.find(marker)
+            candidate = system_prompt[idx + len(marker) :].strip().split(".", 1)[0]
+            if candidate:
+                persona_name = candidate.strip().strip(",")
+
+        payload = {
+            "introduction": f"Hello, I am {persona_name}.",
+            "description": (
+                "I am a persona wrapper configured for structured responses, planning support, "
+                "and clear communication."
+            ),
+            "features": [
+                "Structured output",
+                "Task decomposition",
+                "Context-aware recommendations",
+            ],
+            "skills": [
+                "analysis",
+                "planning",
+                "communication",
+                "documentation",
+            ],
+            "resume": {
+                "title": "AI Persona Assistant",
+                "summary": "Supports onboarding, execution planning, and decision support.",
+                "strengths": ["Problem framing", "Actionable next steps", "Clear written output"],
+                "tooling": ["chat orchestration", "persona policy", "structured JSON responses"],
+            },
+        }
+        return json.dumps(payload)
+
+    return (
+        "[simulated-response] OpenAI API key is not configured. "
+        "This is a local fallback response for integration testing."
+    )
+
+
 def generate_chat_completion(
     *,
     system_prompt: str,
@@ -39,9 +95,9 @@ def generate_chat_completion(
     model = _profile_to_model(model_profile)
 
     if not api_key:
-        content = (
-            "[simulated-response] OpenAI API key is not configured. "
-            "This is a local fallback response for integration testing."
+        content = _simulated_response(
+            system_prompt=system_prompt,
+            conversation_messages=conversation_messages,
         )
         return ChatGenerationResult(
             content=content,

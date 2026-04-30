@@ -6,6 +6,9 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+- Added prompt-catalog governance foundation with schema-only migrations, checksum-validated JSON import/export endpoints, signature-ready manifest metadata, and persona approval policy enforcement for chat/runtime flows.
+- Added persona versioning + rollback, user persona-context APIs, and channel council-configuration/room-persona assignment endpoints to support persistent multi-persona orchestration setup.
+- Added mandatory pack-review workflow with queued imports, required structured conversation test cases, and explicit approve/request-changes/reject decisions before persona installation.
 - Fixed backend editable-install packaging by constraining setuptools discovery to `app*`, avoiding accidental `migrations` package detection in CI.
 - Hardened governance API contracts with typed response envelopes, explicit error status documentation, bearer-auth OpenAPI security metadata, enum-constrained fields, and negative-path contract tests.
 - Added single-tenant bootstrap/auth foundations plus Studio collaboration, realtime websocket, and persona-chat API/runtime primitives with new migrations and contract tests.

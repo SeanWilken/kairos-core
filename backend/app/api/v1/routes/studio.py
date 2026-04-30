@@ -30,6 +30,7 @@ SettingsKey = Literal[
     "channel_policy",
     "task_visibility_default",
     "ai_response_policy",
+    "prompt_policy_mode",
 ]
 
 

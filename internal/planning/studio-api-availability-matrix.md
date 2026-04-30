@@ -2,6 +2,41 @@
 
 This document is the current handoff reference for `kairos-studio` integration against `kairos-core` backend APIs.
 
+## Integration concerns + immediate next steps (Studio handoff)
+
+These are current concerns found while wiring Studio against latest OpenAPI/runtime behavior.
+
+### Contract concerns to address in Core
+
+- Many endpoints still return generic `object` schemas with `additionalProperties=true`; Studio can integrate, but typed client generation and strict validation remain limited.
+- Governance + collaboration endpoints in OpenAPI often enumerate only `200` and `422`, while runtime emits richer statuses (`401/403/404/409/410`) with reason codes.
+- Websocket runtime contract is implemented and stable in code, but not represented in OpenAPI; event/action schema drift risk is increasing as chat orchestration evolves.
+- Invite workflow currently models server-side invite records and acceptance, but email delivery/link-token setup contract still needs explicit first-class API shape.
+
+### Immediate next steps recommended for Core
+
+1. Add typed envelope response schemas for high-traffic endpoints:
+   - `POST /v1/persona-config/import`
+   - `GET/POST /v1/reviews/packs*`
+   - `POST /v1/studio/channels/{channel_id}/chat`
+   - governance endpoints (`/v1/studio/governance/*`, `/v1/studio/invites*`, `/v1/studio/onboarding/*`, `/v1/studio/settings`)
+2. Expand OpenAPI error responses to match runtime behavior, including explicit reason-code examples for 4xx outcomes.
+3. Publish websocket contract docs (or AsyncAPI) for:
+   - connect/auth
+   - incoming actions (`subscribe`, `publish`, `chat.typing`, `chat.send`)
+   - emitted events (`system.connected`, `chat.message.user.created`, `chat.response.*`, `council.*`, `system.error`)
+4. Finalize invite-email contract additions:
+   - invite delivery metadata
+   - invite link/code redemption semantics
+   - expiry/retry/resend/cancel behavior
+5. Add encrypted-at-rest support for AI-only private profile context fields by default (planned for user profile builder integration).
+
+### Studio implementation assumptions until above lands
+
+- Studio will continue defensive parsing of response `data` for mutable endpoints.
+- Studio websocket tester uses the runtime route shape: `WS /v1/realtime/ws?token=<access_jwt>`.
+- Studio persona + profile builder will treat private guidance fields as encrypted-at-rest required data classes.
+
 ## Available now
 
 ### Auth (new)
@@ -72,6 +107,35 @@ This document is the current handoff reference for `kairos-studio` integration a
 - `GET /v1/studio/settings`
 - `PATCH /v1/studio/settings`
 
+### Persona catalog governance (new)
+
+- `POST /v1/studio/personas/{persona_id}/approval`
+- `GET /v1/studio/personas/{persona_id}/versions`
+- `GET /v1/studio/personas/{persona_id}/versions/{version_id}`
+- `POST /v1/studio/personas/{persona_id}/rollback/{version_id}`
+- `GET /v1/studio/channels/{channel_id}/council-config`
+- `PATCH /v1/studio/channels/{channel_id}/council-config`
+- `PUT /v1/studio/channels/{channel_id}/personas`
+- `GET /v1/studio/users/{user_id}/persona-contexts`
+- `GET /v1/studio/users/{user_id}/persona-contexts/{persona_id}`
+- `PUT /v1/studio/users/{user_id}/persona-contexts/{persona_id}`
+- `GET /v1/persona-config/templates/categories`
+- `GET /v1/persona-config/templates/options/{category_name}`
+- `GET /v1/persona-config/prefabs`
+- `GET /v1/persona-config/export`
+- `POST /v1/persona-config/import`
+
+### Pack review workflow (new)
+
+- `GET /v1/reviews/packs`
+- `GET /v1/reviews/packs/{queue_id}`
+- `POST /v1/reviews/packs/{queue_id}/conversation`
+- `POST /v1/reviews/packs/{queue_id}/decision`
+- `POST /v1/reviews/packs/{queue_id}/approve`
+- `POST /v1/reviews/packs/{queue_id}/reject`
+- `POST /v1/reviews/packs/{queue_id}/request-changes`
+- `POST /v1/reviews/packs/{queue_id}/install`
+
 Behavior notes:
 
 - Studio collaboration routes require bearer auth and tenant/org scope from JWT claims.
@@ -83,6 +147,45 @@ Behavior notes:
 - `PATCH /v1/studio/memberships/{membership_id}` updates membership role/status for org assignment workflows.
 - Duplicate email in the same tenant returns `409` with `reason_code=STUDIO_USER_EMAIL_EXISTS`.
 - `org_id` is resolved from payload/JWT scope; non-global users without org context return `422` with `reason_code=STUDIO_ORG_REQUIRED_FOR_USER`.
+
+### Persona-config import compatibility + Studio consumption rules
+
+- `POST /v1/persona-config/import` now accepts three payload shapes:
+  - V2 nested: `manifest + catalog.{categories,options,prefabs,...}`
+  - V2 flat: `manifest + categories/options/prefabs/...`
+  - V1 legacy: `pack_metadata + template_categories/template_options/prefab_segments/...`
+- Unknown or ambiguous payloads are rejected with `reason_code=PACK_SCHEMA_UNKNOWN`.
+- V1 imports are accepted but return deprecation warning entries (`PACK_SCHEMA_V1_DEPRECATED`) in response `data.warnings`.
+- Import response now includes `data.detected_schema` for client telemetry and rollout validation.
+- Import validation failures return `reason_code=PACK_IMPORT_VALIDATION_FAILED` with structured `details.errors`.
+- Option/category normalization resolves category references across ID/name/display-name forms; unresolved references surface as `PACK_OPTION_CATEGORY_UNRESOLVED`.
+
+### Pack install lifecycle for Studio UI
+
+- Import should use `dry_run=true` first, show `warnings`, then submit final import.
+- Queue entries remain non-installed after approval; installation is explicit via `POST /v1/reviews/packs/{queue_id}/install`.
+- Approve/install guards:
+  - required conversation tests must pass before approve (`PACK_REVIEW_REQUIRED_CASES_INCOMPLETE`)
+  - install requires extracted `config.org_id` (`PACK_CONFIG_ORG_ID_REQUIRED`)
+- Suggested Studio state machine:
+  - `pending_review` -> `conversation_required` -> `approved` -> `installed`
+  - `rejected` and `changes_requested` are terminal for that queue item (new import needed).
+
+### Resume-builder alignment (pack + user profile)
+
+- Studio should persist and surface optional payload sections:
+  - `quick_config` (persona resume prefill)
+  - `user_profile_template` (strengths/weaknesses/interests prefill)
+- If missing, backend returns non-blocking warnings:
+  - `PACK_QUICK_CONFIG_MISSING`
+  - `PACK_USER_PROFILE_TEMPLATE_MISSING`
+- `config.org_id` missing is also warning at import time (`PACK_INSTALL_ORG_ID_MISSING`) but blocks install later.
+
+### Wrapper chat integration path (ready now)
+
+- Use `POST /v1/studio/channels/{channel_id}/chat` for wrapper-backed channel chat.
+- Create channel with persona binding (`default_persona_id`) via `POST /v1/studio/channels`.
+- Chat route enforces persona approval policy for org modes (`approval_required`, `allowlist_only`).
 
 ### Interim global-admin bootstrap path (current implementation)
 
@@ -196,6 +299,17 @@ Use split domain roots now (instead of adding more `/v1/studio/*`) to avoid late
 - `studio_org_invites`
 - `studio_org_settings`
 - `studio_org_onboarding`
+- `persona_template_categories`
+- `persona_template_options`
+- `prompt_prefabs`
+- `prompt_catalog_bundles`
+- `persona_versions`
+- `persona_version_history`
+- `user_persona_contexts`
+- `room_council_config`
+- `room_personas`
+- `pack_import_queue`
+- `pack_review_conversations`
 
 Migration required:
 
@@ -203,6 +317,13 @@ Migration required:
 - `migrations/0004_collaboration_foundation.sql`
 - `migrations/0005_persona_and_chat_runtime.sql`
 - `migrations/0006_studio_governance_foundation.sql`
+- `migrations/0007_persona_template_options.sql`
+- `migrations/0008_persona_versioning.sql`
+- `migrations/0009_prompt_prefabs.sql`
+- `migrations/0010_user_persona_context.sql`
+- `migrations/0011_room_council_config.sql`
+- `migrations/0012_prompt_catalog_governance.sql`
+- `migrations/0013_pack_review_workflow.sql`
 
 ## Studio integration guidance
 

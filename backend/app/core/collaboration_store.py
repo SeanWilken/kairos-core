@@ -9,6 +9,10 @@ from sqlalchemy import desc, select
 
 from app.core.db import SessionLocal
 from app.core.db_models import (
+    PersonaVersionHistoryModel,
+    PersonaVersionModel,
+    RoomCouncilConfigModel,
+    RoomPersonaModel,
     StudioChannelMessageModel,
     StudioChannelModel,
     StudioChannelParticipantModel,
@@ -18,6 +22,7 @@ from app.core.db_models import (
     StudioTaskModel,
     StudioTeamMembershipModel,
     StudioTeamModel,
+    UserPersonaContextModel,
 )
 
 
@@ -47,6 +52,9 @@ class CollaborationStore:
             "model_profile": model.model_profile,
             "system_prompt": model.system_prompt,
             "data": data,
+            "approval_status": model.approval_status,
+            "approved_by_user_id": model.approved_by_user_id,
+            "approved_at": _dt_iso(model.approved_at) if model.approved_at else None,
             "created_by_user_id": model.created_by_user_id,
             "created_at": _dt_iso(model.created_at),
             "updated_at": _dt_iso(model.updated_at),
@@ -128,6 +136,97 @@ class CollaborationStore:
             "created_at": _dt_iso(model.created_at),
         }
 
+    def _to_persona_version_dict(self, model: PersonaVersionModel) -> dict[str, Any]:
+        config: dict[str, Any] = {}
+        try:
+            loaded = json.loads(model.config_json)
+            if isinstance(loaded, dict):
+                config = loaded
+        except Exception:
+            config = {}
+
+        return {
+            "version_id": model.version_id,
+            "tenant_id": model.tenant_id,
+            "persona_id": model.persona_id,
+            "version_major": model.version_major,
+            "version_minor": model.version_minor,
+            "version_patch": model.version_patch,
+            "version_string": model.version_string,
+            "config": config,
+            "generated_prompt": model.generated_prompt,
+            "token_count": model.token_count,
+            "change_summary": model.change_summary,
+            "created_by_user_id": model.created_by_user_id,
+            "created_at": _dt_iso(model.created_at),
+        }
+
+    def _to_user_persona_context_dict(self, model: UserPersonaContextModel) -> dict[str, Any]:
+        strengths: list[str] = []
+        weaknesses: list[str] = []
+        context: dict[str, Any] = {}
+        try:
+            loaded_strengths = json.loads(model.user_strengths_json)
+            if isinstance(loaded_strengths, list):
+                strengths = [str(item) for item in loaded_strengths]
+        except Exception:
+            strengths = []
+        try:
+            loaded_weaknesses = json.loads(model.user_weaknesses_json)
+            if isinstance(loaded_weaknesses, list):
+                weaknesses = [str(item) for item in loaded_weaknesses]
+        except Exception:
+            weaknesses = []
+        try:
+            loaded_context = json.loads(model.context_json)
+            if isinstance(loaded_context, dict):
+                context = loaded_context
+        except Exception:
+            context = {}
+
+        return {
+            "context_id": model.context_id,
+            "tenant_id": model.tenant_id,
+            "user_id": model.user_id,
+            "persona_id": model.persona_id,
+            "user_strengths": strengths,
+            "user_weaknesses": weaknesses,
+            "autonomy_level": model.autonomy_level,
+            "communication_preference": model.communication_preference,
+            "detail_level": model.detail_level,
+            "check_in_frequency": model.check_in_frequency,
+            "context": context,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_council_config_dict(self, model: RoomCouncilConfigModel) -> dict[str, Any]:
+        return {
+            "config_id": model.config_id,
+            "tenant_id": model.tenant_id,
+            "room_id": model.room_id,
+            "council_head_persona_id": model.council_head_persona_id,
+            "council_mode": model.council_mode,
+            "delay_before_orchestration_ms": model.delay_before_orchestration_ms,
+            "show_reasoning_metadata": model.show_reasoning_metadata,
+            "allow_parallel_responses": model.allow_parallel_responses,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_room_persona_dict(self, model: RoomPersonaModel) -> dict[str, Any]:
+        return {
+            "room_persona_id": model.room_persona_id,
+            "tenant_id": model.tenant_id,
+            "room_id": model.room_id,
+            "persona_id": model.persona_id,
+            "role_in_room": model.role_in_room,
+            "sort_order": model.sort_order,
+            "is_active": model.is_active,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
     def create_persona(
         self,
         *,
@@ -157,6 +256,9 @@ class CollaborationStore:
                 model_profile=model_profile,
                 system_prompt=system_prompt,
                 persona_json=json.dumps(data),
+                approval_status="draft",
+                approved_by_user_id=None,
+                approved_at=None,
                 created_by_user_id=created_by_user_id,
                 created_at=now,
                 updated_at=now,
@@ -229,12 +331,455 @@ class CollaborationStore:
                 model.system_prompt = system_prompt
             if data is not None:
                 model.persona_json = json.dumps(data)
+            model.approval_status = "draft"
+            model.approved_by_user_id = None
+            model.approved_at = None
             model.updated_at = datetime.now(timezone.utc)
 
             db.add(model)
             db.commit()
             db.refresh(model)
             return self._to_persona_dict(model)
+
+    def set_persona_approval(
+        self,
+        *,
+        tenant_id: str,
+        persona_id: str,
+        approval_status: str,
+        approved_by_user_id: str | None,
+    ) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(StudioPersonaModel).where(
+                    StudioPersonaModel.tenant_id == tenant_id,
+                    StudioPersonaModel.persona_id == persona_id,
+                )
+            )
+            if model is None:
+                return None
+
+            model.approval_status = approval_status
+            if approval_status == "approved":
+                model.approved_by_user_id = approved_by_user_id
+                model.approved_at = datetime.now(timezone.utc)
+            else:
+                model.approved_by_user_id = None
+                model.approved_at = None
+            model.updated_at = datetime.now(timezone.utc)
+            db.add(model)
+            db.commit()
+            db.refresh(model)
+            return self._to_persona_dict(model)
+
+    def _build_persona_generated_prompt(self, persona: dict[str, Any]) -> str:
+        lines = [
+            f"Name: {persona.get('name', '')}",
+            f"Role: {persona.get('role', '')}",
+            f"Scope: {persona.get('scope', '')}",
+            f"Model Profile: {persona.get('model_profile', '')}",
+        ]
+        system_prompt = str(persona.get("system_prompt", "")).strip()
+        if system_prompt:
+            lines.append(system_prompt)
+        data = persona.get("data", {})
+        if isinstance(data, dict) and data:
+            lines.append(json.dumps(data, ensure_ascii=True, sort_keys=True))
+        return "\n\n".join(lines)
+
+    def _compute_next_persona_version(
+        self,
+        *,
+        db,
+        tenant_id: str,
+        persona_id: str,
+        bump: str,
+    ) -> tuple[int, int, int]:
+        latest = db.scalar(
+            select(PersonaVersionModel)
+            .where(
+                PersonaVersionModel.tenant_id == tenant_id,
+                PersonaVersionModel.persona_id == persona_id,
+            )
+            .order_by(
+                desc(PersonaVersionModel.version_major),
+                desc(PersonaVersionModel.version_minor),
+                desc(PersonaVersionModel.version_patch),
+            )
+        )
+        if latest is None:
+            return (1, 0, 0)
+
+        major = latest.version_major
+        minor = latest.version_minor
+        patch = latest.version_patch
+        if bump == "major":
+            return (major + 1, 0, 0)
+        if bump == "minor":
+            return (major, minor + 1, 0)
+        return (major, minor, patch + 1)
+
+    def create_persona_version(
+        self,
+        *,
+        tenant_id: str,
+        persona_id: str,
+        created_by_user_id: str | None,
+        bump: str = "patch",
+        change_summary: str = "",
+    ) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            persona_model = db.scalar(
+                select(StudioPersonaModel).where(
+                    StudioPersonaModel.tenant_id == tenant_id,
+                    StudioPersonaModel.persona_id == persona_id,
+                )
+            )
+            if persona_model is None:
+                return None
+
+            persona = self._to_persona_dict(persona_model)
+            generated_prompt = self._build_persona_generated_prompt(persona)
+            token_count = max(len(generated_prompt.split()), 0)
+            major, minor, patch = self._compute_next_persona_version(
+                db=db,
+                tenant_id=tenant_id,
+                persona_id=persona_id,
+                bump=bump,
+            )
+            now = datetime.now(timezone.utc)
+            version_model = PersonaVersionModel(
+                version_id=str(uuid4()),
+                tenant_id=tenant_id,
+                persona_id=persona_id,
+                version_major=major,
+                version_minor=minor,
+                version_patch=patch,
+                version_string=f"{major}.{minor}.{patch}",
+                config_json=json.dumps(persona),
+                generated_prompt=generated_prompt,
+                token_count=token_count,
+                change_summary=change_summary,
+                created_by_user_id=created_by_user_id,
+                created_at=now,
+            )
+            db.add(version_model)
+            db.commit()
+            db.refresh(version_model)
+            return self._to_persona_version_dict(version_model)
+
+    def list_persona_versions(self, *, tenant_id: str, persona_id: str) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(PersonaVersionModel)
+                .where(
+                    PersonaVersionModel.tenant_id == tenant_id,
+                    PersonaVersionModel.persona_id == persona_id,
+                )
+                .order_by(
+                    desc(PersonaVersionModel.version_major),
+                    desc(PersonaVersionModel.version_minor),
+                    desc(PersonaVersionModel.version_patch),
+                )
+            ).all()
+            return [self._to_persona_version_dict(row) for row in rows]
+
+    def get_persona_version(
+        self,
+        *,
+        tenant_id: str,
+        persona_id: str,
+        version_id: str,
+    ) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(PersonaVersionModel).where(
+                    PersonaVersionModel.tenant_id == tenant_id,
+                    PersonaVersionModel.persona_id == persona_id,
+                    PersonaVersionModel.version_id == version_id,
+                )
+            )
+            return self._to_persona_version_dict(model) if model else None
+
+    def get_latest_persona_version(self, *, tenant_id: str, persona_id: str) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(PersonaVersionModel)
+                .where(
+                    PersonaVersionModel.tenant_id == tenant_id,
+                    PersonaVersionModel.persona_id == persona_id,
+                )
+                .order_by(
+                    desc(PersonaVersionModel.version_major),
+                    desc(PersonaVersionModel.version_minor),
+                    desc(PersonaVersionModel.version_patch),
+                )
+            )
+            return self._to_persona_version_dict(model) if model else None
+
+    def rollback_persona_to_version(
+        self,
+        *,
+        tenant_id: str,
+        persona_id: str,
+        version_id: str,
+        changed_by_user_id: str,
+    ) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            persona_model = db.scalar(
+                select(StudioPersonaModel).where(
+                    StudioPersonaModel.tenant_id == tenant_id,
+                    StudioPersonaModel.persona_id == persona_id,
+                )
+            )
+            version_model = db.scalar(
+                select(PersonaVersionModel).where(
+                    PersonaVersionModel.tenant_id == tenant_id,
+                    PersonaVersionModel.persona_id == persona_id,
+                    PersonaVersionModel.version_id == version_id,
+                )
+            )
+            if persona_model is None or version_model is None:
+                return None
+
+            try:
+                snapshot = json.loads(version_model.config_json)
+            except Exception:
+                return None
+            if not isinstance(snapshot, dict):
+                return None
+
+            fields = {
+                "name": "name",
+                "slug": "slug",
+                "role": "role",
+                "scope": "scope",
+                "enabled": "enabled",
+                "model_profile": "model_profile",
+                "system_prompt": "system_prompt",
+            }
+            now = datetime.now(timezone.utc)
+            for key, attr_name in fields.items():
+                if key in snapshot:
+                    old = getattr(persona_model, attr_name)
+                    new = snapshot[key]
+                    if old != new:
+                        db.add(
+                            PersonaVersionHistoryModel(
+                                history_id=str(uuid4()),
+                                tenant_id=tenant_id,
+                                version_id=version_id,
+                                field_name=key,
+                                old_value=str(old) if old is not None else None,
+                                new_value=str(new) if new is not None else None,
+                                changed_by_user_id=changed_by_user_id,
+                                changed_at=now,
+                            )
+                        )
+                    setattr(persona_model, attr_name, new)
+
+            data = snapshot.get("data")
+            if isinstance(data, dict):
+                persona_model.persona_json = json.dumps(data)
+
+            persona_model.approval_status = "draft"
+            persona_model.approved_by_user_id = None
+            persona_model.approved_at = None
+            persona_model.updated_at = now
+            db.add(persona_model)
+            db.commit()
+            db.refresh(persona_model)
+            return self._to_persona_dict(persona_model)
+
+    def upsert_user_persona_context(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        persona_id: str,
+        user_strengths: list[str],
+        user_weaknesses: list[str],
+        autonomy_level: str,
+        communication_preference: str,
+        detail_level: str,
+        check_in_frequency: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(UserPersonaContextModel).where(
+                    UserPersonaContextModel.tenant_id == tenant_id,
+                    UserPersonaContextModel.user_id == user_id,
+                    UserPersonaContextModel.persona_id == persona_id,
+                )
+            )
+            now = datetime.now(timezone.utc)
+            if model is None:
+                model = UserPersonaContextModel(
+                    context_id=str(uuid4()),
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    persona_id=persona_id,
+                    user_strengths_json=json.dumps(user_strengths),
+                    user_weaknesses_json=json.dumps(user_weaknesses),
+                    autonomy_level=autonomy_level,
+                    communication_preference=communication_preference,
+                    detail_level=detail_level,
+                    check_in_frequency=check_in_frequency,
+                    context_json=json.dumps(context),
+                    created_at=now,
+                    updated_at=now,
+                )
+            else:
+                model.user_strengths_json = json.dumps(user_strengths)
+                model.user_weaknesses_json = json.dumps(user_weaknesses)
+                model.autonomy_level = autonomy_level
+                model.communication_preference = communication_preference
+                model.detail_level = detail_level
+                model.check_in_frequency = check_in_frequency
+                model.context_json = json.dumps(context)
+                model.updated_at = now
+            db.add(model)
+            db.commit()
+            db.refresh(model)
+            return self._to_user_persona_context_dict(model)
+
+    def get_user_persona_context(
+        self,
+        *,
+        tenant_id: str,
+        user_id: str,
+        persona_id: str,
+    ) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(UserPersonaContextModel).where(
+                    UserPersonaContextModel.tenant_id == tenant_id,
+                    UserPersonaContextModel.user_id == user_id,
+                    UserPersonaContextModel.persona_id == persona_id,
+                )
+            )
+            return self._to_user_persona_context_dict(model) if model else None
+
+    def list_user_persona_contexts(self, *, tenant_id: str, user_id: str) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(UserPersonaContextModel)
+                .where(
+                    UserPersonaContextModel.tenant_id == tenant_id,
+                    UserPersonaContextModel.user_id == user_id,
+                )
+                .order_by(UserPersonaContextModel.updated_at.desc())
+            ).all()
+            return [self._to_user_persona_context_dict(row) for row in rows]
+
+    def upsert_room_council_config(
+        self,
+        *,
+        tenant_id: str,
+        room_id: str,
+        council_head_persona_id: str | None,
+        council_mode: str,
+        delay_before_orchestration_ms: int,
+        show_reasoning_metadata: bool,
+        allow_parallel_responses: bool,
+    ) -> dict[str, Any]:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(RoomCouncilConfigModel).where(
+                    RoomCouncilConfigModel.tenant_id == tenant_id,
+                    RoomCouncilConfigModel.room_id == room_id,
+                )
+            )
+            now = datetime.now(timezone.utc)
+            if model is None:
+                model = RoomCouncilConfigModel(
+                    config_id=str(uuid4()),
+                    tenant_id=tenant_id,
+                    room_id=room_id,
+                    council_head_persona_id=council_head_persona_id,
+                    council_mode=council_mode,
+                    delay_before_orchestration_ms=delay_before_orchestration_ms,
+                    show_reasoning_metadata=show_reasoning_metadata,
+                    allow_parallel_responses=allow_parallel_responses,
+                    created_at=now,
+                    updated_at=now,
+                )
+            else:
+                model.council_head_persona_id = council_head_persona_id
+                model.council_mode = council_mode
+                model.delay_before_orchestration_ms = delay_before_orchestration_ms
+                model.show_reasoning_metadata = show_reasoning_metadata
+                model.allow_parallel_responses = allow_parallel_responses
+                model.updated_at = now
+            db.add(model)
+            db.commit()
+            db.refresh(model)
+            return self._to_council_config_dict(model)
+
+    def get_room_council_config(self, *, tenant_id: str, room_id: str) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            model = db.scalar(
+                select(RoomCouncilConfigModel).where(
+                    RoomCouncilConfigModel.tenant_id == tenant_id,
+                    RoomCouncilConfigModel.room_id == room_id,
+                )
+            )
+            return self._to_council_config_dict(model) if model else None
+
+    def set_room_personas(
+        self,
+        *,
+        tenant_id: str,
+        room_id: str,
+        persona_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            existing_rows = db.scalars(
+                select(RoomPersonaModel).where(
+                    RoomPersonaModel.tenant_id == tenant_id,
+                    RoomPersonaModel.room_id == room_id,
+                )
+            ).all()
+            for row in existing_rows:
+                db.delete(row)
+
+            now = datetime.now(timezone.utc)
+            created: list[RoomPersonaModel] = []
+            for item in persona_items:
+                persona_id = str(item.get("persona_id", "")).strip()
+                if not persona_id:
+                    continue
+                row = RoomPersonaModel(
+                    room_persona_id=str(uuid4()),
+                    tenant_id=tenant_id,
+                    room_id=room_id,
+                    persona_id=persona_id,
+                    role_in_room=str(item.get("role_in_room", "member")),
+                    sort_order=int(item.get("sort_order", 0)),
+                    is_active=bool(item.get("is_active", True)),
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(row)
+                created.append(row)
+
+            db.commit()
+            for row in created:
+                db.refresh(row)
+            return [self._to_room_persona_dict(row) for row in created]
+
+    def list_room_personas(self, *, tenant_id: str, room_id: str) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(RoomPersonaModel)
+                .where(
+                    RoomPersonaModel.tenant_id == tenant_id,
+                    RoomPersonaModel.room_id == room_id,
+                )
+                .order_by(RoomPersonaModel.sort_order.asc(), RoomPersonaModel.created_at.asc())
+            ).all()
+            return [self._to_room_persona_dict(row) for row in rows]
 
     def _to_task_dict(self, model: StudioTaskModel) -> dict[str, Any]:
         return {
