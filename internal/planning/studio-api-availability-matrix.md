@@ -60,8 +60,20 @@ These are current concerns found while wiring Studio against latest OpenAPI/runt
 - `PATCH /v1/bootstrap/sessions/{session_id}`
 - `GET /v1/system/status?session_id=...`
 - `POST /v1/system/checks/run`
+- `GET /v1/system/ai/providers`
+- `GET /v1/system/ai/providers/{provider_id}/models`
+- `GET /v1/system/audit/events`
 - `POST /v1/ingest/jobs`
 - `GET /v1/ingest/jobs/{job_id}`
+
+### Knowledge index hub foundation (new)
+
+- `POST /v1/knowledge/domains`
+- `GET /v1/knowledge/domains`
+- `POST /v1/knowledge/nodes`
+- `GET /v1/knowledge/nodes`
+- `POST /v1/knowledge/edges`
+- `GET /v1/knowledge/edges`
 
 ### Studio foundation (new)
 
@@ -324,6 +336,9 @@ Migration required:
 - `migrations/0011_room_council_config.sql`
 - `migrations/0012_prompt_catalog_governance.sql`
 - `migrations/0013_pack_review_workflow.sql`
+- `migrations/0014_orchestration_runs_and_event_outbox.sql`
+- `migrations/0015_audit_events.sql`
+- `migrations/0016_knowledge_index_foundation.sql`
 
 ## Studio integration guidance
 

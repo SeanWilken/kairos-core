@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -750,6 +750,267 @@ class PackReviewConversationModel(Base):
     )
 
 
+class ConversationOrchestrationRunModel(Base):
+    __tablename__ = "conversation_orchestration_runs"
+
+    run_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    room_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channels.channel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    triggering_message_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channel_messages.message_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    parent_run_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("conversation_orchestration_runs.run_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    source_run_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("conversation_orchestration_runs.run_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    orchestration_type: Mapped[str] = mapped_column(Text, nullable=False, default="single_best")
+    mode: Mapped[str] = mapped_column(Text, nullable=False, default="single_best")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="queued", index=True)
+    client_message_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    failure_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    total_input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_cost_estimate: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EventOutboxModel(Base):
+    __tablename__ = "event_outbox"
+
+    outbox_event_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    room_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_channels.channel_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    orchestration_run_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("conversation_orchestration_runs.run_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "room_id", "sequence", name="uq_event_outbox_tenant_room_sequence"),
+    )
+
+
+class AuditEventModel(Base):
+    __tablename__ = "audit_events"
+
+    audit_event_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    actor_type: Mapped[str] = mapped_column(Text, nullable=False, default="system")
+    actor_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    resource_type: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    resource_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    room_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    orchestration_run_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    decision: Mapped[str] = mapped_column(Text, nullable=False, default="allowed")
+    reason_code: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    policy_version: Mapped[str] = mapped_column(Text, nullable=False, default="v1")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class FallbackApprovalRequestModel(Base):
+    __tablename__ = "fallback_approval_requests"
+
+    request_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    room_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    orchestration_run_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    persona_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_provider_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_model_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    fallback_provider_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    fallback_model_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    trigger_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", index=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    approved_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    rejected_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ResumeAdapterPolicyModel(Base):
+    __tablename__ = "resume_adapter_policies"
+
+    policy_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        default="",
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False, default="default")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft", index=True)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    rolled_back_from_policy_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class PromptTemplateVersionModel(Base):
+    __tablename__ = "prompt_template_versions"
+
+    template_version_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    provider_id: Mapped[str] = mapped_column(Text, nullable=False, default="openai", index=True)
+    template_kind: Mapped[str] = mapped_column(Text, nullable=False, default="system_prompt", index=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False, default="default")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PromptTemplateActivationModel(Base):
+    __tablename__ = "prompt_template_activations"
+
+    activation_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    scope_level: Mapped[str] = mapped_column(Text, nullable=False, default="tenant", index=True)
+    scope_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    provider_id: Mapped[str] = mapped_column(Text, nullable=False, default="openai", index=True)
+    template_kind: Mapped[str] = mapped_column(Text, nullable=False, default="system_prompt", index=True)
+    template_version_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("prompt_template_versions.template_version_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    rolled_back_from_activation_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class ModelGatewayPolicyModel(Base):
+    __tablename__ = "model_gateway_policies"
+
+    policy_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False, default="default")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft", index=True)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    rolled_back_from_policy_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+
+
+class ToolExecutionModel(Base):
+    __tablename__ = "tool_executions"
+
+    execution_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    tool_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    provider_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    model_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="completed")
+    input_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    output_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class EmailMessageModel(Base):
+    __tablename__ = "email_messages"
+
+    email_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    direction: Mapped[str] = mapped_column(Text, nullable=False, default="outbound")
+    sender: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    recipients_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    subject: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
 class StudioOrgInviteModel(Base):
     __tablename__ = "studio_org_invites"
 
@@ -823,3 +1084,107 @@ class StudioOrgOnboardingModel(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class KnowledgeDomainModel(Base):
+    __tablename__ = "knowledge_domains"
+
+    domain_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    parent_domain_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("knowledge_domains.domain_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    sensitivity_default: Mapped[str] = mapped_column(Text, nullable=False, default="internal")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "org_id", "name", name="uq_knowledge_domains_name"),)
+
+
+class KnowledgeNodeModel(Base):
+    __tablename__ = "knowledge_nodes"
+
+    node_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    domain_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("knowledge_domains.domain_id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    node_type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    sensitivity: Mapped[str] = mapped_column(Text, nullable=False, default="internal")
+    source_type: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    owner_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class KnowledgeEdgeModel(Base):
+    __tablename__ = "knowledge_edges"
+
+    edge_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_node_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("knowledge_nodes.node_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_node_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("knowledge_nodes.node_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    relationship_type: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    visibility: Mapped[str] = mapped_column(Text, nullable=False, default="internal")
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "org_id", "from_node_id", "to_node_id", "relationship_type", name="uq_knowledge_edges_relation"),
+    )

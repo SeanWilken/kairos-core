@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.prompt_template_renderer import render_template
+from app.core.prompt_template_store import prompt_template_store
+
 
 def _join_lines(items: list[str]) -> str:
     return "\n".join([item for item in items if item.strip()])
@@ -70,3 +73,38 @@ def compile_persona_system_prompt(persona: dict[str, Any]) -> str:
             lines.append(f"Primary user context: {user_context}.")
 
     return _join_lines(lines).strip()
+
+
+def compile_persona_system_prompt_resolved(
+    *,
+    tenant_id: str,
+    persona: dict[str, Any],
+    org_id: str,
+    division_id: str = "",
+    team_id: str = "",
+) -> str:
+    base = compile_persona_system_prompt(persona)
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    runtime = data.get("runtime", {}) if isinstance(data.get("runtime"), dict) else {}
+    provider_id = str(runtime.get("provider_id", "openai") or "openai").strip().lower()
+    resolved = prompt_template_store.resolve_template(
+        tenant_id=tenant_id,
+        provider_id=provider_id,
+        template_kind="system_prompt",
+        scopes={"team": team_id, "division": division_id, "org": org_id, "tenant": tenant_id},
+    )
+    if not resolved:
+        return base
+    content = str((resolved.get("version", {}) or {}).get("content", "")).strip()
+    if not content:
+        return base
+    context = {
+        "persona": {
+            "name": persona.get("name", ""),
+            "role": persona.get("role", ""),
+            "scope": persona.get("scope", "organization"),
+            "base_prompt": base,
+        }
+    }
+    rendered = render_template(content, context)
+    return rendered or base

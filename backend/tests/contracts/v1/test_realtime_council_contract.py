@@ -105,11 +105,19 @@ def test_realtime_council_summarized_orchestration_contract() -> None:
             }
         )
 
-        event1 = websocket.receive_json()
-        event2 = websocket.receive_json()
-        event3 = websocket.receive_json()
+        events: set[str] = set()
+        for _ in range(10):
+            event = websocket.receive_json()
+            event_name = event.get("event")
+            if isinstance(event_name, str):
+                events.add(event_name)
+            if {
+                "chat.message.user.created",
+                "council.delayed_start",
+                "council.response",
+            }.issubset(events):
+                break
 
-        events = {event1.get("event"), event2.get("event"), event3.get("event")}
         assert "chat.message.user.created" in events
         assert "council.delayed_start" in events
         assert "council.response" in events

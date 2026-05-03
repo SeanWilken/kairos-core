@@ -6,6 +6,7 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+- Added administrator-oriented orchestration and tooling foundations including adaptive chat action routing, async provider model gateway adapters, fallback approval workflows, provider-scoped prompt template activation/rollback, and configurable image/email tool plugin runtimes with persisted execution history.
 - Added prompt-catalog governance foundation with schema-only migrations, checksum-validated JSON import/export endpoints, signature-ready manifest metadata, and persona approval policy enforcement for chat/runtime flows.
 - Added persona versioning + rollback, user persona-context APIs, and channel council-configuration/room-persona assignment endpoints to support persistent multi-persona orchestration setup.
 - Added mandatory pack-review workflow with queued imports, required structured conversation test cases, and explicit approve/request-changes/reject decisions before persona installation.

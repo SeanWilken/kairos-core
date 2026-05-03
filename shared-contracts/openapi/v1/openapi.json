@@ -581,6 +581,963 @@
         }
       }
     },
+    "/v1/system/ai/providers": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Ai Provider Status",
+        "operationId": "get_ai_provider_status_v1_system_ai_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Ai Provider Status V1 System Ai Providers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/ai/providers/{provider_id}/models": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Ai Provider Models",
+        "operationId": "get_ai_provider_models_v1_system_ai_providers__provider_id__models_get",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Capability"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Ai Provider Models V1 System Ai Providers  Provider Id  Models Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/audit/events": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List Audit Events",
+        "operationId": "list_audit_events_v1_system_audit_events_get",
+        "parameters": [
+          {
+            "name": "room_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Room Id"
+            }
+          },
+          {
+            "name": "orchestration_run_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Orchestration Run Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Audit Events V1 System Audit Events Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/fallback-approvals": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List Fallback Approvals",
+        "operationId": "list_fallback_approvals_v1_system_fallback_approvals_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Fallback Approvals V1 System Fallback Approvals Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/fallback-approvals/{request_id}/decision": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Decide Fallback Approval",
+        "operationId": "decide_fallback_approval_v1_system_fallback_approvals__request_id__decision_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FallbackDecisionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Fallback Approval V1 System Fallback Approvals  Request Id  Decision Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/resume-adapter-policies": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List Resume Adapter Policies",
+        "operationId": "list_resume_adapter_policies_v1_system_resume_adapter_policies_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Resume Adapter Policies V1 System Resume Adapter Policies Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Create Resume Adapter Policy",
+        "operationId": "create_resume_adapter_policy_v1_system_resume_adapter_policies_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeAdapterPolicyPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Resume Adapter Policy V1 System Resume Adapter Policies Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/resume-adapter-policies/{policy_id}/activate": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Activate Resume Adapter Policy",
+        "operationId": "activate_resume_adapter_policy_v1_system_resume_adapter_policies__policy_id__activate_post",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeAdapterPolicyActivatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Activate Resume Adapter Policy V1 System Resume Adapter Policies  Policy Id  Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/resume-adapter-policies/{policy_id}/rollback": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Rollback Resume Adapter Policy",
+        "operationId": "rollback_resume_adapter_policy_v1_system_resume_adapter_policies__policy_id__rollback_post",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeAdapterPolicyActivatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Rollback Resume Adapter Policy V1 System Resume Adapter Policies  Policy Id  Rollback Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/prompt-templates/versions": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List Prompt Template Versions",
+        "operationId": "list_prompt_template_versions_v1_system_prompt_templates_versions_get",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "template_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Template Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Prompt Template Versions V1 System Prompt Templates Versions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Create Prompt Template Version",
+        "operationId": "create_prompt_template_version_v1_system_prompt_templates_versions_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptTemplateVersionPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Prompt Template Version V1 System Prompt Templates Versions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/prompt-templates/activations": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Activate Prompt Template",
+        "operationId": "activate_prompt_template_v1_system_prompt_templates_activations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromptTemplateActivatePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Activate Prompt Template V1 System Prompt Templates Activations Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/prompt-templates/activations/{activation_id}/rollback": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Rollback Prompt Template Activation",
+        "operationId": "rollback_prompt_template_activation_v1_system_prompt_templates_activations__activation_id__rollback_post",
+        "parameters": [
+          {
+            "name": "activation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Activation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Rollback Prompt Template Activation V1 System Prompt Templates Activations  Activation Id  Rollback Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/prompt-templates/resolve": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Resolve Prompt Template",
+        "operationId": "resolve_prompt_template_v1_system_prompt_templates_resolve_get",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "template_kind",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Template Kind"
+            }
+          },
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Org Id"
+            }
+          },
+          {
+            "name": "division_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Division Id"
+            }
+          },
+          {
+            "name": "team_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Team Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Resolve Prompt Template V1 System Prompt Templates Resolve Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/model-gateway-policies": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "List Model Gateway Policies",
+        "operationId": "list_model_gateway_policies_v1_system_model_gateway_policies_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Model Gateway Policies V1 System Model Gateway Policies Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Create Model Gateway Policy",
+        "operationId": "create_model_gateway_policy_v1_system_model_gateway_policies_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelGatewayPolicyPayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Model Gateway Policy V1 System Model Gateway Policies Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/model-gateway-policies/{policy_id}/activate": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Activate Model Gateway Policy",
+        "operationId": "activate_model_gateway_policy_v1_system_model_gateway_policies__policy_id__activate_post",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeAdapterPolicyActivatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Activate Model Gateway Policy V1 System Model Gateway Policies  Policy Id  Activate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/system/model-gateway-policies/{policy_id}/rollback": {
+      "post": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Rollback Model Gateway Policy",
+        "operationId": "rollback_model_gateway_policy_v1_system_model_gateway_policies__policy_id__rollback_post",
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Policy Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeAdapterPolicyActivatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Rollback Model Gateway Policy V1 System Model Gateway Policies  Policy Id  Rollback Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ingest/jobs": {
       "post": {
         "tags": [
@@ -2870,6 +3827,38 @@
               "type": "string",
               "title": "Persona Id"
             }
+          },
+          {
+            "name": "provider_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Id"
+            }
           }
         ],
         "responses": {
@@ -3556,6 +4545,296 @@
         }
       }
     },
+    "/v1/knowledge/domains": {
+      "post": {
+        "tags": [
+          "knowledge-index"
+        ],
+        "summary": "Create Knowledge Domain",
+        "operationId": "create_knowledge_domain_v1_knowledge_domains_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeDomainCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Knowledge Domain V1 Knowledge Domains Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "knowledge-index"
+        ],
+        "summary": "List Knowledge Domains",
+        "operationId": "list_knowledge_domains_v1_knowledge_domains_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Org Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Knowledge Domains V1 Knowledge Domains Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/knowledge/nodes": {
+      "post": {
+        "tags": [
+          "knowledge-index"
+        ],
+        "summary": "Create Knowledge Node",
+        "operationId": "create_knowledge_node_v1_knowledge_nodes_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeNodeCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Knowledge Node V1 Knowledge Nodes Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "knowledge-index"
+        ],
+        "summary": "List Knowledge Nodes",
+        "operationId": "list_knowledge_nodes_v1_knowledge_nodes_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Org Id"
+            }
+          },
+          {
+            "name": "domain_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Knowledge Nodes V1 Knowledge Nodes Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/knowledge/edges": {
+      "post": {
+        "tags": [
+          "knowledge-index"
+        ],
+        "summary": "Create Knowledge Edge",
+        "operationId": "create_knowledge_edge_v1_knowledge_edges_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeEdgeCreatePayload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Knowledge Edge V1 Knowledge Edges Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "knowledge-index"
+        ],
+        "summary": "List Knowledge Edges",
+        "operationId": "list_knowledge_edges_v1_knowledge_edges_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "Org Id"
+            }
+          },
+          {
+            "name": "node_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Knowledge Edges V1 Knowledge Edges Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/reviews/packs": {
       "get": {
         "tags": [
@@ -3964,6 +5243,223 @@
           }
         }
       }
+    },
+    "/v1/tools/image/generate": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Generate Image",
+        "operationId": "generate_image_v1_tools_image_generate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageGeneratePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Generate Image V1 Tools Image Generate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools/providers/status": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Get Providers Status",
+        "operationId": "get_providers_status_v1_tools_providers_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Providers Status V1 Tools Providers Status Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools/executions": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "List Tool Executions",
+        "operationId": "list_tool_executions_v1_tools_executions_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Tool Executions V1 Tools Executions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools/email/send": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Send Email",
+        "operationId": "send_email_v1_tools_email_send_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSendPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Send Email V1 Tools Email Send Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tools/email/messages": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "List Email Messages",
+        "operationId": "list_email_messages_v1_tools_email_messages_get",
+        "parameters": [
+          {
+            "name": "org_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Org Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Email Messages V1 Tools Email Messages Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4281,6 +5777,45 @@
         ],
         "title": "DivisionCreatePayload"
       },
+      "EmailSendPayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "sender": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Sender"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recipients"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Subject"
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id",
+          "sender",
+          "subject",
+          "body"
+        ],
+        "title": "EmailSendPayload"
+      },
       "Envelope_StudioErrorData_": {
         "properties": {
           "meta": {
@@ -4496,6 +6031,20 @@
         ],
         "title": "ErrorBody"
       },
+      "FallbackDecisionPayload": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "pattern": "^(approve|reject)$",
+            "title": "Decision"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "FallbackDecisionPayload"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -4508,6 +6057,41 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ImageGeneratePayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Prompt"
+          },
+          "provider_id": {
+            "type": "string",
+            "title": "Provider Id",
+            "default": "google"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id",
+            "default": "imagen-3.0-generate-002"
+          },
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id",
+            "default": "nano_banana"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id",
+          "prompt"
+        ],
+        "title": "ImageGeneratePayload"
       },
       "IngestJobCreatePayload": {
         "properties": {
@@ -4551,6 +6135,201 @@
           "embedding_profile"
         ],
         "title": "IngestJobCreatePayload"
+      },
+      "KnowledgeDomainCreatePayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "parent_domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Domain Id"
+          },
+          "sensitivity_default": {
+            "type": "string",
+            "title": "Sensitivity Default",
+            "default": "internal"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id",
+          "name"
+        ],
+        "title": "KnowledgeDomainCreatePayload"
+      },
+      "KnowledgeEdgeCreatePayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "from_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "From Node Id"
+          },
+          "to_node_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "To Node Id"
+          },
+          "relationship_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Relationship Type"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "visibility": {
+            "type": "string",
+            "title": "Visibility",
+            "default": "internal"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id",
+          "from_node_id",
+          "to_node_id",
+          "relationship_type"
+        ],
+        "title": "KnowledgeEdgeCreatePayload"
+      },
+      "KnowledgeNodeCreatePayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "domain_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain Id"
+          },
+          "node_type": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Node Type"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "sensitivity": {
+            "type": "string",
+            "title": "Sensitivity",
+            "default": "internal"
+          },
+          "source_type": {
+            "type": "string",
+            "title": "Source Type",
+            "default": ""
+          },
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "default": ""
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner User Id"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "active"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence",
+            "default": 1.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id",
+          "node_type",
+          "title"
+        ],
+        "title": "KnowledgeNodeCreatePayload"
       },
       "LoginPayload": {
         "properties": {
@@ -4631,6 +6410,31 @@
           "correlation_id"
         ],
         "title": "Meta"
+      },
+      "ModelGatewayPolicyPayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "default": "default"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id"
+        ],
+        "title": "ModelGatewayPolicyPayload"
       },
       "PackConversationTestPayload": {
         "properties": {
@@ -4748,6 +6552,33 @@
             "title": "Model Profile",
             "default": "reasoning-optimized"
           },
+          "runtime_provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Provider Id"
+          },
+          "runtime_model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Model Id"
+          },
+          "fallback_policy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Fallback Policy"
+          },
           "system_prompt": {
             "type": "string",
             "title": "System Prompt",
@@ -4836,6 +6667,40 @@
             ],
             "title": "Model Profile"
           },
+          "runtime_provider_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Provider Id"
+          },
+          "runtime_model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runtime Model Id"
+          },
+          "fallback_policy": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fallback Policy"
+          },
           "system_prompt": {
             "anyOf": [
               {
@@ -4872,6 +6737,81 @@
         },
         "type": "object",
         "title": "PersonaPatchPayload"
+      },
+      "PromptTemplateActivatePayload": {
+        "properties": {
+          "scope_level": {
+            "type": "string",
+            "pattern": "^(tenant|org|division|team)$",
+            "title": "Scope Level"
+          },
+          "scope_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Scope Id"
+          },
+          "provider_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Provider Id"
+          },
+          "template_kind": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Kind"
+          },
+          "template_version_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Version Id"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope_level",
+          "scope_id",
+          "provider_id",
+          "template_kind",
+          "template_version_id"
+        ],
+        "title": "PromptTemplateActivatePayload"
+      },
+      "PromptTemplateVersionPayload": {
+        "properties": {
+          "provider_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Provider Id"
+          },
+          "template_kind": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Template Kind"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "default": "default"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_id",
+          "template_kind",
+          "content"
+        ],
+        "title": "PromptTemplateVersionPayload"
       },
       "RefreshPayload": {
         "properties": {
@@ -4955,6 +6895,45 @@
           "last_name"
         ],
         "title": "RegisterPayload"
+      },
+      "ResumeAdapterPolicyActivatePayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id"
+        ],
+        "title": "ResumeAdapterPolicyActivatePayload"
+      },
+      "ResumeAdapterPolicyPayload": {
+        "properties": {
+          "org_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Org Id"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "default": "default"
+          },
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "org_id"
+        ],
+        "title": "ResumeAdapterPolicyPayload"
       },
       "RoomCouncilConfigPayload": {
         "properties": {

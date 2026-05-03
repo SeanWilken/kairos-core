@@ -20,6 +20,11 @@ def _openai_endpoint() -> str:
     return f"{base}/chat/completions"
 
 
+def _gemini_endpoint(model: str, api_key: str) -> str:
+    base = os.getenv("GEMINI_API_ENDPOINT", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
+    return f"{base}/models/{model}:generateContent?key={api_key}"
+
+
 def _profile_to_model(profile: str) -> str:
     profile_map = {
         "reasoning-optimized": os.getenv("LLM_MODEL", "gpt-4o-mini"),
@@ -27,6 +32,15 @@ def _profile_to_model(profile: str) -> str:
         "balanced": os.getenv("LLM_MODEL", "gpt-4o-mini"),
     }
     return profile_map.get(profile, os.getenv("LLM_MODEL", "gpt-4o-mini"))
+
+
+def _profile_to_gemini_model(profile: str) -> str:
+    profile_map = {
+        "reasoning-optimized": os.getenv("GEMINI_MODEL", "gemini-2.5-pro"),
+        "fast": os.getenv("GEMINI_FAST_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.5-flash")),
+        "balanced": os.getenv("GEMINI_BALANCED_MODEL", os.getenv("GEMINI_MODEL", "gemini-2.5-flash")),
+    }
+    return profile_map.get(profile, os.getenv("GEMINI_MODEL", "gemini-2.5-flash"))
 
 
 def _simulated_response(
@@ -90,9 +104,34 @@ def generate_chat_completion(
     system_prompt: str,
     conversation_messages: list[dict[str, str]],
     model_profile: str,
+    provider_override: str | None = None,
+    model_override: str | None = None,
 ) -> ChatGenerationResult:
+    live_mode_enabled = os.getenv("LLM_LIVE_MODE", "false").strip().lower() in {"1", "true", "yes", "on"}
+    provider = (provider_override or os.getenv("LLM_PROVIDER", "openai")).strip().lower()
+    if not live_mode_enabled:
+        model = (model_override or (_profile_to_gemini_model(model_profile) if provider == "gemini" else _profile_to_model(model_profile))).strip()
+        content = _simulated_response(
+            system_prompt=system_prompt,
+            conversation_messages=conversation_messages,
+        )
+        return ChatGenerationResult(
+            content=content,
+            provider=f"{provider}-simulated",
+            model=model,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        )
+
+    if provider == "gemini":
+        return _generate_gemini_completion(
+            system_prompt=system_prompt,
+            conversation_messages=conversation_messages,
+            model_profile=model_profile,
+            model_override=model_override,
+        )
+
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    model = _profile_to_model(model_profile)
+    model = (model_override or _profile_to_model(model_profile)).strip()
 
     if not api_key:
         content = _simulated_response(
@@ -148,4 +187,82 @@ def generate_chat_completion(
         provider="openai",
         model=model,
         usage=usage if isinstance(usage, dict) else {},
+    )
+
+
+def _generate_gemini_completion(
+    *,
+    system_prompt: str,
+    conversation_messages: list[dict[str, str]],
+    model_profile: str,
+    model_override: str | None = None,
+) -> ChatGenerationResult:
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    model = (model_override or _profile_to_gemini_model(model_profile)).strip()
+
+    if not api_key:
+        content = _simulated_response(
+            system_prompt=system_prompt,
+            conversation_messages=conversation_messages,
+        )
+        return ChatGenerationResult(
+            content=content,
+            provider="gemini-simulated",
+            model=model,
+            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        )
+
+    parts = []
+    for msg in conversation_messages:
+        role = str(msg.get("role", "user"))
+        gemini_role = "user" if role == "user" else "model"
+        parts.append(
+            {
+                "role": gemini_role,
+                "parts": [{"text": str(msg.get("content", ""))}],
+            }
+        )
+
+    payload: dict[str, Any] = {
+        "contents": parts,
+        "generationConfig": {"temperature": 0.4},
+    }
+    if system_prompt.strip():
+        payload["systemInstruction"] = {"parts": [{"text": system_prompt.strip()}]}
+
+    req = request.Request(
+        _gemini_endpoint(model, api_key),
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+
+    try:
+        with request.urlopen(req, timeout=60) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except Exception as error:
+        raise RuntimeError(f"Gemini provider request failed: {error}") from error
+
+    candidates = body.get("candidates", []) if isinstance(body, dict) else []
+    if not candidates:
+        raise RuntimeError("Gemini provider returned no candidates.")
+
+    content_obj = candidates[0].get("content", {}) if isinstance(candidates[0], dict) else {}
+    parts_obj = content_obj.get("parts", []) if isinstance(content_obj, dict) else []
+    text_parts = [str(item.get("text", "")) for item in parts_obj if isinstance(item, dict)]
+    content = "\n".join(part for part in text_parts if part).strip()
+    if not content:
+        raise RuntimeError("Gemini provider returned empty response content.")
+
+    usage_metadata = body.get("usageMetadata", {}) if isinstance(body, dict) else {}
+    usage = {
+        "prompt_tokens": int(usage_metadata.get("promptTokenCount", 0) or 0),
+        "completion_tokens": int(usage_metadata.get("candidatesTokenCount", 0) or 0),
+        "total_tokens": int(usage_metadata.get("totalTokenCount", 0) or 0),
+    }
+    return ChatGenerationResult(
+        content=content,
+        provider="gemini",
+        model=model,
+        usage=usage,
     )

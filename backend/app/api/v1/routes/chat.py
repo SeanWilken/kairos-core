@@ -5,12 +5,18 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from app.core.ai_provider import generate_chat_completion
+from app.core.audit_store import audit_store
 from app.core.auth_context import AuthContext, require_authentication, require_roles
 from app.core.collaboration_store import collaboration_store
-from app.core.persona_prompt import compile_persona_system_prompt
+from app.core.context_window_service import context_window_service
+from app.core.fallback_store import fallback_store
+from app.core.model_gateway import ModelRequest, model_gateway
+from app.core.persona_prompt import compile_persona_system_prompt, compile_persona_system_prompt_resolved
+from app.core.resume_export_adapter import build_provider_resume_export
+from app.core.resume_adapter_policy_store import resume_adapter_policy_store
 from app.core.response import ok_response
 from app.core.studio_store import studio_store
+from app.core.tool_provider_registry import is_provider_configured
 
 router = APIRouter(prefix="/studio", tags=["studio-chat"])
 
@@ -23,6 +29,9 @@ class PersonaCreatePayload(BaseModel):
     scope: str = Field(default="organization")
     enabled: bool = True
     model_profile: str = Field(default="reasoning-optimized")
+    runtime_provider_id: str | None = None
+    runtime_model_id: str | None = None
+    fallback_policy: dict[str, Any] = Field(default_factory=dict)
     system_prompt: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
 
@@ -34,6 +43,9 @@ class PersonaPatchPayload(BaseModel):
     scope: str | None = None
     enabled: bool | None = None
     model_profile: str | None = None
+    runtime_provider_id: str | None = None
+    runtime_model_id: str | None = None
+    fallback_policy: dict[str, Any] | None = None
     system_prompt: str | None = None
     data: dict[str, Any] | None = None
     version_bump: str = Field(default="patch")
@@ -127,6 +139,95 @@ def _enforce_persona_policy(
             },
         )
 
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    runtime = data.get("runtime", {}) if isinstance(data.get("runtime"), dict) else {}
+    provider_id = str(runtime.get("provider_id", "")).strip().lower()
+    if provider_id and not is_provider_configured(provider_id):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Persona provider is not configured for this deployment.",
+                "details": {"reason_code": "STUDIO_PERSONA_PROVIDER_UNAVAILABLE", "provider_id": provider_id},
+            },
+        )
+
+    allowed_providers = org_settings.get("ai_provider_allowlist", [])
+    if isinstance(allowed_providers, list) and provider_id:
+        normalized = {str(item).strip().lower() for item in allowed_providers if str(item).strip()}
+        if normalized and provider_id not in normalized:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Persona provider is not allowed in this organization.",
+                    "details": {"reason_code": "STUDIO_PERSONA_PROVIDER_FORBIDDEN", "provider_id": provider_id},
+                },
+            )
+
+
+def _persona_runtime_model_settings(persona: dict[str, Any]) -> tuple[str | None, str | None]:
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    runtime = data.get("runtime", {}) if isinstance(data.get("runtime"), dict) else {}
+    provider_id = str(runtime.get("provider_id", "")).strip().lower() or None
+    model_id = str(runtime.get("model_id", "")).strip() or None
+    return provider_id, model_id
+
+
+def _persona_fallback_policy(persona: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(persona, dict):
+        return {}
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    runtime = data.get("runtime", {}) if isinstance(data.get("runtime"), dict) else {}
+    policy = runtime.get("fallback_policy", {})
+    if isinstance(policy, dict):
+        return policy
+    return {}
+
+
+def _merge_persona_runtime(
+    *,
+    base_data: dict[str, Any],
+    runtime_provider_id: str | None,
+    runtime_model_id: str | None,
+    fallback_policy: dict[str, Any] | None,
+) -> dict[str, Any]:
+    data = dict(base_data)
+    runtime = data.get("runtime", {}) if isinstance(data.get("runtime"), dict) else {}
+    if runtime_provider_id is not None:
+        runtime["provider_id"] = runtime_provider_id.strip().lower()
+    if runtime_model_id is not None:
+        runtime["model_id"] = runtime_model_id.strip()
+    if fallback_policy is not None:
+        runtime["fallback_policy"] = fallback_policy
+    data["runtime"] = runtime
+    return data
+
+
+def _validate_runtime_provider(*, tenant_id: str, org_id: str, provider_id: str | None) -> None:
+    normalized = str(provider_id or "").strip().lower()
+    if not normalized:
+        return
+    if not is_provider_configured(normalized):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Selected runtime provider is not configured.",
+                "details": {"reason_code": "STUDIO_PERSONA_PROVIDER_UNAVAILABLE", "provider_id": normalized},
+            },
+        )
+    settings = studio_store.get_org_settings(tenant_id=tenant_id, org_id=org_id)
+    org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
+    allowlist = org_settings.get("ai_provider_allowlist", [])
+    if isinstance(allowlist, list):
+        allowed = {str(item).strip().lower() for item in allowlist if str(item).strip()}
+        if allowed and normalized not in allowed:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Selected runtime provider is not allowed for this organization.",
+                    "details": {"reason_code": "STUDIO_PERSONA_PROVIDER_FORBIDDEN", "provider_id": normalized},
+                },
+            )
+
 
 def _estimate_cost_per_message(*, token_count: int, model_profile: str) -> float:
     profile_cost_per_1k = {
@@ -143,6 +244,17 @@ def create_persona(request: Request, payload: PersonaCreatePayload) -> dict[str,
     auth = require_authentication(request, require_org=True)
     require_roles(auth, {"owner", "admin"})
     _enforce_org_scope(auth, payload.org_id)
+    _validate_runtime_provider(
+        tenant_id=auth.tenant_id,
+        org_id=payload.org_id,
+        provider_id=payload.runtime_provider_id,
+    )
+    persona_data = _merge_persona_runtime(
+        base_data=payload.data,
+        runtime_provider_id=payload.runtime_provider_id,
+        runtime_model_id=payload.runtime_model_id,
+        fallback_policy=payload.fallback_policy,
+    )
     persona = collaboration_store.create_persona(
         tenant_id=auth.tenant_id,
         org_id=payload.org_id,
@@ -153,7 +265,7 @@ def create_persona(request: Request, payload: PersonaCreatePayload) -> dict[str,
         enabled=payload.enabled,
         model_profile=payload.model_profile,
         system_prompt=payload.system_prompt,
-        data=payload.data,
+        data=persona_data,
         created_by_user_id=auth.user_id,
     )
     version = collaboration_store.create_persona_version(
@@ -179,7 +291,23 @@ def list_personas(
         org_id=org_id,
         enabled_only=enabled_only,
     )
-    return ok_response(request, data={"items": items})
+    settings = studio_store.get_org_settings(tenant_id=auth.tenant_id, org_id=org_id)
+    org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
+    allowed_providers = org_settings.get("ai_provider_allowlist", [])
+    allowed = (
+        {str(item).strip().lower() for item in allowed_providers if str(item).strip()}
+        if isinstance(allowed_providers, list)
+        else set()
+    )
+    filtered: list[dict[str, Any]] = []
+    for item in items:
+        provider_id, _ = _persona_runtime_model_settings(item)
+        if provider_id and not is_provider_configured(provider_id):
+            continue
+        if provider_id and allowed and provider_id not in allowed:
+            continue
+        filtered.append(item)
+    return ok_response(request, data={"items": filtered})
 
 
 @router.get("/personas/{persona_id}")
@@ -212,6 +340,15 @@ def patch_persona(request: Request, persona_id: str, payload: PersonaPatchPayloa
             },
         )
     _enforce_org_scope(auth, existing["org_id"])
+    provider_for_validation = payload.runtime_provider_id
+    if provider_for_validation is None:
+        existing_provider, _ = _persona_runtime_model_settings(existing)
+        provider_for_validation = existing_provider
+    _validate_runtime_provider(
+        tenant_id=auth.tenant_id,
+        org_id=existing["org_id"],
+        provider_id=provider_for_validation,
+    )
 
     if payload.version_bump not in {"patch", "major"}:
         raise HTTPException(
@@ -221,6 +358,14 @@ def patch_persona(request: Request, persona_id: str, payload: PersonaPatchPayloa
                 "details": {"reason_code": "STUDIO_PERSONA_VERSION_BUMP_INVALID", "field": "version_bump"},
             },
         )
+
+    incoming_data = payload.data if payload.data is not None else (existing.get("data", {}) if isinstance(existing.get("data"), dict) else {})
+    merged_data = _merge_persona_runtime(
+        base_data=incoming_data,
+        runtime_provider_id=payload.runtime_provider_id,
+        runtime_model_id=payload.runtime_model_id,
+        fallback_policy=payload.fallback_policy,
+    )
 
     updated = collaboration_store.update_persona(
         tenant_id=auth.tenant_id,
@@ -232,7 +377,7 @@ def patch_persona(request: Request, persona_id: str, payload: PersonaPatchPayloa
         enabled=payload.enabled,
         model_profile=payload.model_profile,
         system_prompt=payload.system_prompt,
-        data=payload.data,
+        data=merged_data,
     )
     if updated is None:
         raise HTTPException(
@@ -367,7 +512,12 @@ def rollback_persona(request: Request, persona_id: str, version_id: str) -> dict
 
 
 @router.get("/personas/{persona_id}/export-resume")
-def export_persona_resume(request: Request, persona_id: str) -> dict[str, Any]:
+def export_persona_resume(
+    request: Request,
+    persona_id: str,
+    provider_id: str | None = Query(default=None),
+    model_id: str | None = Query(default=None),
+) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
     persona = collaboration_store.get_persona(tenant_id=auth.tenant_id, persona_id=persona_id)
     if persona is None:
@@ -447,6 +597,22 @@ def export_persona_resume(request: Request, persona_id: str) -> dict[str, Any]:
                 else "claude-sonnet-4"
             ),
         },
+        "provider_export": build_provider_resume_export(
+            resume=resume,
+            metadata={
+                "version": version_string,
+                "approval_status": persona.get("approval_status", "draft"),
+            },
+            provider_id=provider_id,
+            model_id=model_id,
+            policy_config=(
+                (resume_adapter_policy_store.get_active_policy(
+                    tenant_id=auth.tenant_id,
+                    org_id=persona["org_id"],
+                    name="default",
+                ) or {}).get("config", {})
+            ),
+        ),
     }
     return ok_response(request, data=response_data)
 
@@ -751,19 +917,170 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
         channel_id=channel_id,
         limit=40,
     )
+    settings = studio_store.get_org_settings(tenant_id=auth.tenant_id, org_id=channel["org_id"])
+    org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
+    compaction_level = str(org_settings.get("context_compaction_level", "medium"))
+    persona_data = persona.get("data", {}) if isinstance(persona and persona.get("data"), dict) else {}
+    persona_runtime = persona_data.get("runtime", {}) if isinstance(persona_data.get("runtime"), dict) else {}
+    compaction_disabled = bool(persona_runtime.get("disable_compaction", False))
+    context_result = context_window_service.prepare_messages(
+        messages=messages,
+        level=compaction_level,
+        disabled=compaction_disabled,
+    )
 
     system_prompt = ""
     model_profile = "reasoning-optimized"
+    provider_override = None
+    model_override = None
     if persona is not None:
         _enforce_persona_policy(tenant_id=auth.tenant_id, org_id=channel["org_id"], persona=persona)
-        system_prompt = compile_persona_system_prompt(persona)
+        system_prompt = compile_persona_system_prompt_resolved(
+            tenant_id=auth.tenant_id,
+            persona=persona,
+            org_id=channel["org_id"],
+            team_id=str(channel.get("team_id", "") or ""),
+        )
         model_profile = persona.get("model_profile", "reasoning-optimized")
+        provider_override, model_override = _persona_runtime_model_settings(persona)
 
-    result = generate_chat_completion(
-        system_prompt=system_prompt,
-        conversation_messages=messages,
-        model_profile=model_profile,
-    )
+    try:
+        result = model_gateway.generate_text_sync(
+            ModelRequest(
+                system_prompt=system_prompt,
+                conversation_messages=context_result.messages,
+                model_profile=model_profile,
+                provider_id=provider_override,
+                model_id=model_override,
+                tenant_id=auth.tenant_id,
+                org_id=channel["org_id"],
+            )
+        )
+    except Exception as error:
+        fallback_policy = _persona_fallback_policy(persona)
+        fallback_provider_id = str(fallback_policy.get("provider_id", "")).strip().lower()
+        fallback_model_id = str(fallback_policy.get("model_id", "")).strip()
+        approval_required = bool(fallback_policy.get("approval_required", True))
+        enabled = bool(fallback_policy.get("enabled", False))
+        if enabled and approval_required and fallback_provider_id and fallback_model_id:
+            consumed_approval = fallback_store.consume_approved_request(
+                tenant_id=auth.tenant_id,
+                org_id=channel["org_id"],
+                room_id=channel_id,
+                persona_id=persona.get("persona_id") if persona else "",
+                source_provider_id=provider_override or "",
+                source_model_id=model_override or "",
+                fallback_provider_id=fallback_provider_id,
+                fallback_model_id=fallback_model_id,
+            )
+            if consumed_approval is not None:
+                result = model_gateway.generate_text_sync(
+                    ModelRequest(
+                        system_prompt=system_prompt,
+                        conversation_messages=context_result.messages,
+                        model_profile=model_profile,
+                        provider_id=fallback_provider_id,
+                        model_id=fallback_model_id,
+                        tenant_id=auth.tenant_id,
+                        org_id=channel["org_id"],
+                    )
+                )
+                audit_store.record_event(
+                    tenant_id=auth.tenant_id,
+                    actor_type="user",
+                    actor_id=auth.user_id,
+                    action="fallback.executed",
+                    resource_type="fallback_approval_request",
+                    resource_id=consumed_approval["request_id"],
+                    room_id=channel_id,
+                    decision="allowed",
+                    reason_code="FALLBACK_APPROVAL_CONSUMED",
+                    metadata={
+                        "source_provider_id": provider_override or "",
+                        "source_model_id": model_override or "",
+                        "fallback_provider_id": fallback_provider_id,
+                        "fallback_model_id": fallback_model_id,
+                    },
+                )
+                
+                assistant_message = collaboration_store.create_channel_message(
+                    tenant_id=auth.tenant_id,
+                    channel_id=channel_id,
+                    sender_user_id=auth.user_id,
+                    content=result.content,
+                    metadata={
+                        "sender_kind": "assistant",
+                        "provider": result.provider,
+                        "model": result.model,
+                        "usage": result.usage,
+                        "persona_id": persona.get("persona_id") if persona else None,
+                        "mode": payload.mode,
+                        "fallback_approval_request_id": consumed_approval["request_id"],
+                        "context_window": {
+                            "raw_token_estimate": context_result.raw_token_estimate,
+                            "compacted_token_estimate": context_result.compacted_token_estimate,
+                            "tokens_saved_estimate": context_result.tokens_saved_estimate,
+                            "compaction_applied": context_result.compaction_applied,
+                            "compaction_level": compaction_level,
+                            "compaction_disabled": compaction_disabled,
+                        },
+                    },
+                )
+                return ok_response(
+                    request,
+                    data={
+                        "user_message": user_message,
+                        "assistant_message": assistant_message,
+                    },
+                )
+
+            approval_request = fallback_store.create_request(
+                tenant_id=auth.tenant_id,
+                org_id=channel["org_id"],
+                room_id=channel_id,
+                orchestration_run_id="",
+                persona_id=persona.get("persona_id") if persona else "",
+                source_provider_id=provider_override or "",
+                source_model_id=model_override or "",
+                fallback_provider_id=fallback_provider_id,
+                fallback_model_id=fallback_model_id,
+                trigger_reason="chat_generation_error",
+                created_by_user_id=auth.user_id,
+                metadata={
+                    "mode": payload.mode,
+                    "error": str(error),
+                },
+            )
+            audit_store.record_event(
+                tenant_id=auth.tenant_id,
+                actor_type="user",
+                actor_id=auth.user_id,
+                action="fallback.approval.required",
+                resource_type="fallback_approval_request",
+                resource_id=approval_request["request_id"],
+                room_id=channel_id,
+                decision="deferred",
+                reason_code="FALLBACK_APPROVAL_REQUIRED",
+                metadata={
+                    "persona_id": persona.get("persona_id") if persona else "",
+                    "source_provider_id": provider_override or "",
+                    "source_model_id": model_override or "",
+                    "fallback_provider_id": fallback_provider_id,
+                    "fallback_model_id": fallback_model_id,
+                    "trigger_reason": "chat_generation_error",
+                },
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Fallback execution requires approval.",
+                    "details": {
+                        "reason_code": "STUDIO_FALLBACK_APPROVAL_REQUIRED",
+                        "request_id": approval_request["request_id"],
+                    },
+                },
+            ) from error
+        raise
 
     assistant_message = collaboration_store.create_channel_message(
         tenant_id=auth.tenant_id,
@@ -777,6 +1094,14 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
             "usage": result.usage,
             "persona_id": persona.get("persona_id") if persona else None,
             "mode": payload.mode,
+            "context_window": {
+                "raw_token_estimate": context_result.raw_token_estimate,
+                "compacted_token_estimate": context_result.compacted_token_estimate,
+                "tokens_saved_estimate": context_result.tokens_saved_estimate,
+                "compaction_applied": context_result.compaction_applied,
+                "compaction_level": compaction_level,
+                "compaction_disabled": compaction_disabled,
+            },
         },
     )
 
