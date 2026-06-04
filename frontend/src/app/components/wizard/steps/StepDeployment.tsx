@@ -1,4 +1,4 @@
-import { Checkbox, Input, Label, cn } from "@kairosstack/ui";
+import { Checkbox, Input, Label, cn } from "@myai-tech/myui";
 
 import { INFRA_COMPONENTS } from "../constants";
 import type { DeployTarget, ExecMode, StepProps } from "../types";
@@ -136,10 +136,10 @@ export function StepDeployment({ state, update }: StepProps) {
                 <Input
                   value={state.core_api_custom_image}
                   onChange={(e) => update({ core_api_custom_image: e.target.value })}
-                  placeholder="ghcr.io/your-org/kairos-core-api:tag"
+                  placeholder="myaitech/myai-core-api:tag"
                   className="font-mono text-xs"
                 />
-                <p className="text-xs text-zinc-500">If private, ensure Docker/Podman CLI is already authenticated to your registry.</p>
+                <p className="text-xs text-zinc-500">Examples: `myaitech/myai-core-api:stable`, `myaitech/myai-de-api:stable`. If private, ensure Docker/Podman CLI is already authenticated to your registry.</p>
               </div>
             )}
           </div>

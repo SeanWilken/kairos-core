@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@kairosstack/ui";
+} from "@myai-tech/myui";
 
 const navigation = [
   { name: "Core Setup", href: "/" },
@@ -16,12 +16,15 @@ const navigation = [
   { name: "Recovery", href: "/recovery" },
 ];
 
-export function KairosShell() {
+export function MyAIShell() {
   return (
     <div className="h-screen flex flex-col bg-zinc-50">
       <header className="h-16 bg-white border-b border-zinc-200 flex items-center justify-between px-6 flex-shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="text-xl font-bold text-zinc-900">Kairos Core</h1>
+          <div className="flex items-center gap-3">
+            <img src="/myAI.svg" alt="MyAI" className="h-8 w-8 rounded-md object-contain" />
+            <h1 className="text-xl font-bold text-zinc-900">MyAI Core</h1>
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -32,10 +35,10 @@ export function KairosShell() {
                 <ChevronDown className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="kairos-overlay-content w-44">
-              <DropdownMenuItem className="kairos-overlay-item">Development</DropdownMenuItem>
-              <DropdownMenuItem className="kairos-overlay-item">Staging</DropdownMenuItem>
-              <DropdownMenuItem className="kairos-overlay-item">Production</DropdownMenuItem>
+            <DropdownMenuContent align="start" className="myai-overlay-content w-44">
+              <DropdownMenuItem className="myai-overlay-item">Development</DropdownMenuItem>
+              <DropdownMenuItem className="myai-overlay-item">Staging</DropdownMenuItem>
+              <DropdownMenuItem className="myai-overlay-item">Production</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -56,21 +59,21 @@ export function KairosShell() {
                 <ChevronDown className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="kairos-overlay-content w-40">
-              <DropdownMenuItem className="kairos-overlay-item">
+            <DropdownMenuContent align="end" className="myai-overlay-content w-40">
+              <DropdownMenuItem className="myai-overlay-item">
                 <Settings className="h-4 w-4 mr-2" />
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuItem className="kairos-overlay-item">
+              <DropdownMenuItem className="myai-overlay-item">
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Backup Tools
               </DropdownMenuItem>
-              <DropdownMenuItem className="kairos-overlay-item">
+              <DropdownMenuItem className="myai-overlay-item">
                 <ShieldAlert className="h-4 w-4 mr-2" />
                 Admin Reset
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="kairos-overlay-item">Sign Out</DropdownMenuItem>
+              <DropdownMenuItem className="myai-overlay-item">Sign Out</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

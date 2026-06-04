@@ -1,10 +1,15 @@
 export type ModelMode = "api_provider" | "local_model";
-export type ApiProvider = "openai" | "anthropic" | "custom";
+export type ApiProvider = "openai" | "anthropic" | "google" | "custom";
 export type LocalProvider = "ollama" | "lmstudio" | "custom";
 export type DeployTarget = "docker_local" | "k8s" | "terraform" | "github_actions";
 export type ContainerEngine = "docker" | "podman";
 export type CoreApiRuntimeMode = "local_source" | "bundled_image" | "custom_image";
-export type FrontendService = "kros_core_frontend" | "kros_studio_frontend" | "kros_council_frontend";
+export type FrontendService =
+  | "myai_core_frontend"
+  | "myai_studio_frontend"
+  | "myai_council_frontend"
+  | "myai_de_frontend"
+  | "myai_knowledger_frontend";
 export type ExecMode = "generate_only" | "attempt_automated";
 export type SecretsMode = "template_only" | "transient_validate_only" | "pipeline_injected";
 export type VectorMode = "disabled" | "enabled";

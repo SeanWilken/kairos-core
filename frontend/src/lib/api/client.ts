@@ -47,9 +47,28 @@ export class CoreApiError extends Error {
 
 export type CoreApiClient = ReturnType<typeof createCoreApiClient>;
 
+type RuntimeConfig = {
+  tenantId?: string;
+  coreApiBaseUrl?: string;
+  deApiBaseUrl?: string;
+  appId?: string;
+};
+
+function getRuntimeConfig(): RuntimeConfig {
+  const globalConfig = (globalThis as { __MYAI_CONFIG__?: RuntimeConfig }).__MYAI_CONFIG__;
+  return globalConfig && typeof globalConfig === "object" ? globalConfig : {};
+}
+
 export function getDefaultCoreApiBaseUrl(): string {
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
-  return env.VITE_KAIROS_CORE_API_BASE_URL ?? "http://localhost:8000";
+  const runtime = getRuntimeConfig();
+  return runtime.coreApiBaseUrl ?? env.VITE_MYAI_CORE_API_BASE_URL ?? "http://localhost:8000";
+}
+
+export function getDefaultTenantId(): string {
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
+  const runtime = getRuntimeConfig();
+  return runtime.tenantId ?? env.VITE_MYAI_TENANT_ID ?? "tenant-local";
 }
 
 export function createCoreApiClient(config?: {

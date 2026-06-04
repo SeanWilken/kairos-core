@@ -1,25 +1,37 @@
-import { Checkbox, Label, cn } from "@kairosstack/ui";
+import { Checkbox, Label, cn } from "@myai-tech/myui";
 
 import type { FrontendService, StepProps } from "../types";
 
 const FRONTEND_OPTIONS: Array<{ id: FrontendService; label: string; description: string; port: string }> = [
   {
-    id: "kros_core_frontend",
-    label: "kros_core_frontend",
-    description: "Core operator UI wired to kairos-core API",
+    id: "myai_core_frontend",
+    label: "myai_core_frontend",
+    description: "Core operator UI wired to myai-core API",
     port: "8080",
   },
   {
-    id: "kros_studio_frontend",
-    label: "kros_studio_frontend",
-    description: "Studio workflow UI wired to kairos-core API",
+    id: "myai_studio_frontend",
+    label: "myai_studio_frontend",
+    description: "Studio workflow UI wired to myai-core API",
     port: "8081",
   },
   {
-    id: "kros_council_frontend",
-    label: "kros_council_frontend",
-    description: "Council governance UI wired to kairos-core API",
+    id: "myai_council_frontend",
+    label: "myai_council_frontend",
+    description: "Council governance UI wired to myai-core API",
     port: "8082",
+  },
+  {
+    id: "myai_de_frontend",
+    label: "myai_de_frontend",
+    description: "myAIDE frontend wired to myai-core API",
+    port: "8083",
+  },
+  {
+    id: "myai_knowledger_frontend",
+    label: "myai_knowledger_frontend",
+    description: "Knowledger frontend wired to myai-core API",
+    port: "8084",
   },
 ];
 
@@ -36,7 +48,10 @@ export function StepFrontends({ state, update }: StepProps) {
       <div>
         <Label>Install Frontend Services (multiple select)</Label>
         <p className="mt-1 text-xs text-zinc-500">
-          Selected services are added directly to generated compose with API wiring to `core_api`.
+          Selected services are added directly to generated compose. You can run all services in one stack, or split by selecting only the services you want now.
+        </p>
+        <p className="mt-1 text-xs text-zinc-500">
+          `myai_de_frontend` targets `myai_de_api` when that server is selected in Deployment; otherwise it falls back to `core_api`.
         </p>
       </div>
 

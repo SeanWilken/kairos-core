@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
-import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, cn } from "@kairosstack/ui";
+import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, cn } from "@myai-tech/myui";
 
 import { TagInput } from "../common";
 import type { StepProps } from "../types";
@@ -13,6 +13,7 @@ export function StepSecrets({ state, update }: StepProps) {
         const keyMap: Record<string, string> = {
           openai: "OPENAI_API_KEY",
           anthropic: "ANTHROPIC_API_KEY",
+          google: "GEMINI_API_KEY",
           custom: "CUSTOM_API_KEY",
         };
         const key = keyMap[c.provider];
@@ -68,11 +69,11 @@ export function StepSecrets({ state, update }: StepProps) {
         <Label>Storage Target</Label>
         <Select value={state.storage_target} onValueChange={(v) => update({ storage_target: v })}>
           <SelectTrigger className="w-64"><SelectValue /></SelectTrigger>
-          <SelectContent className="kairos-overlay-content kairos-select-content">
-            <SelectItem value="env_file" className="kairos-overlay-item">.env file</SelectItem>
-            <SelectItem value="vault" className="kairos-overlay-item">HashiCorp Vault</SelectItem>
-            <SelectItem value="aws_ssm" className="kairos-overlay-item">AWS SSM Parameter Store</SelectItem>
-            <SelectItem value="github_secrets" className="kairos-overlay-item">GitHub Secrets</SelectItem>
+          <SelectContent className="myai-overlay-content myai-select-content">
+            <SelectItem value="env_file" className="myai-overlay-item">.env file</SelectItem>
+            <SelectItem value="vault" className="myai-overlay-item">HashiCorp Vault</SelectItem>
+            <SelectItem value="aws_ssm" className="myai-overlay-item">AWS SSM Parameter Store</SelectItem>
+            <SelectItem value="github_secrets" className="myai-overlay-item">GitHub Secrets</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -105,8 +106,8 @@ export function StepSecrets({ state, update }: StepProps) {
                   {[
                     ["POSTGRES_HOST", "localhost"],
                     ["POSTGRES_PORT", "5432"],
-                    ["POSTGRES_DB", "kairos"],
-                    ["POSTGRES_USER", "kairos"],
+                    ["POSTGRES_DB", "myai"],
+                    ["POSTGRES_USER", "myai"],
                   ].map(([key, fallback]) => (
                     <div key={key} className="space-y-1">
                       <Label className="text-xs text-zinc-600">{key}</Label>

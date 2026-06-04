@@ -1,11 +1,12 @@
 import { AlertCircle, AlertTriangle, Plus, Trash2 } from "lucide-react";
-import { Badge, Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, cn } from "@kairosstack/ui";
+import { Badge, Button, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, cn } from "@myai-tech/myui";
 
 import type { Connection, ModelMode, StepProps } from "../types";
 
 const API_DEFAULTS: Record<string, { endpoint: string; model: string }> = {
   openai: { endpoint: "https://api.openai.com/v1", model: "gpt-4o-mini" },
   anthropic: { endpoint: "https://api.anthropic.com", model: "claude-3-5-sonnet-latest" },
+  google: { endpoint: "https://generativelanguage.googleapis.com/v1beta", model: "gemini-2.5-flash" },
   custom: { endpoint: "https://api.example.com/v1", model: "model-name" },
 };
 
@@ -75,9 +76,9 @@ export function StepRuntime({ state, update }: StepProps) {
           <Label>Tenant Type</Label>
           <Select value={state.tenant_type} onValueChange={(v) => update({ tenant_type: v as "company" | "individual" })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent className="kairos-overlay-content kairos-select-content">
-              <SelectItem value="company" className="kairos-overlay-item">Company</SelectItem>
-              <SelectItem value="individual" className="kairos-overlay-item">Individual</SelectItem>
+            <SelectContent className="myai-overlay-content myai-select-content">
+              <SelectItem value="company" className="myai-overlay-item">Company</SelectItem>
+              <SelectItem value="individual" className="myai-overlay-item">Individual</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -136,10 +137,10 @@ export function StepRuntime({ state, update }: StepProps) {
                   <Label className="text-xs">Provider</Label>
                   <Select value={conn.provider} onValueChange={(v) => updConn(conn.id, "provider", v)}>
                     <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                    <SelectContent className="kairos-overlay-content kairos-select-content">
+                    <SelectContent className="myai-overlay-content myai-select-content">
                       {conn.mode === "api_provider"
-                        ? ["openai", "anthropic", "custom"].map((p) => <SelectItem key={p} value={p} className="kairos-overlay-item text-xs">{p}</SelectItem>)
-                        : ["ollama", "lmstudio", "custom"].map((p) => <SelectItem key={p} value={p} className="kairos-overlay-item text-xs">{p}</SelectItem>)}
+                        ? ["openai", "anthropic", "google", "custom"].map((p) => <SelectItem key={p} value={p} className="myai-overlay-item text-xs">{p}</SelectItem>)
+                        : ["ollama", "lmstudio", "custom"].map((p) => <SelectItem key={p} value={p} className="myai-overlay-item text-xs">{p}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -172,7 +173,7 @@ export function StepRuntime({ state, update }: StepProps) {
       {state.model_modes.includes("api_provider") && (
         <div className="flex gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <AlertCircle className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-blue-800">OpenAI and Anthropic are supported out of the box. API keys are configured in Step 3; only key names are stored in this session.</p>
+          <p className="text-xs text-blue-800">OpenAI, Anthropic, and Google are supported out of the box. API keys are configured in Step 3; only key names are stored in this session.</p>
         </div>
       )}
 

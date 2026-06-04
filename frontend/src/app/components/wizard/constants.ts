@@ -14,6 +14,7 @@ import type { CheckResult, WizardState } from "./types";
 
 export const INFRA_COMPONENTS = [
   { id: "core_api", label: "core_api", description: "Primary application server", required: true },
+  { id: "myai_de_api", label: "myai_de_api", description: "myAIDE application server (optional)" },
   { id: "postgres", label: "postgres", description: "Relational database" },
   { id: "pgvector", label: "pgvector", description: "Vector extension (requires postgres)" },
   { id: "local_model_runtime", label: "local_model_runtime", description: "Ollama / LM Studio runtime" },
@@ -75,8 +76,8 @@ export const INITIAL_STATE: WizardState = {
   local_env_overrides: {
     POSTGRES_HOST: "localhost",
     POSTGRES_PORT: "5432",
-    POSTGRES_DB: "kairos",
-    POSTGRES_USER: "kairos",
+    POSTGRES_DB: "myai",
+    POSTGRES_USER: "myai",
   },
   vector_store_mode: "disabled",
   vector_provider: "pgvector",
