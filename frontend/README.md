@@ -1,13 +1,13 @@
 # Frontend
 
-This folder contains the React + TypeScript reference UI for Kairos Core bootstrap/setup.
+This folder contains the React + TypeScript reference UI for MyAI Core bootstrap/setup.
 
 ## Stack
 
 - React + React Router
 - TypeScript + Vite
 - Tailwind CSS v4
-- `@kairosstack/ui` shared component library
+- `@myai-tech/myui` shared component library
 
 ## Frontend role in the ecosystem
 
@@ -26,7 +26,7 @@ Open the local Vite URL and run through the setup wizard.
 
 ## Tailwind + Shared UI package
 
-Tailwind source scanning includes both local app files and `@kairosstack/ui` package files.
+Tailwind source scanning includes both local app files and `@myai-tech/myui` package files.
 
 - `src/styles/tailwind.css`
 

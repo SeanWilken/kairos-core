@@ -3,12 +3,154 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 
 from app.core.auth_context import require_authentication, require_roles
 from app.core.prompt_catalog_store import checksum_sha256, prompt_catalog_store
 from app.core.response import ok_response
 
 router = APIRouter(prefix="/persona-config", tags=["persona-config"])
+
+
+class PersonaImportPayload(BaseModel):
+    name: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    industry: str = ""
+    headline: str = ""
+    summary: str = ""
+    orgId: str = Field(min_length=1)
+    scope: str = "organization"
+    modelProfile: str = "reasoning-optimized"
+    traits: list[str] = Field(default_factory=list)
+    communicationStyle: str = "balanced"
+    initiativeLevel: str = "moderate"
+    tone: str = "professional"
+    doList: str = ""
+    dontList: str = ""
+    guardrails: str = ""
+    tools: list[str] = Field(default_factory=list)
+    systemPromptOverride: str = ""
+
+
+def _split_lines(value: str) -> list[str]:
+    return [line.strip() for line in str(value or "").splitlines() if line.strip()]
+
+
+def _slugify(value: str) -> str:
+    lowered = "".join(ch.lower() if ch.isalnum() else "-" for ch in value.strip())
+    normalized = "-".join(part for part in lowered.split("-") if part)
+    return normalized or "persona"
+
+
+def _persona_import_to_pack(payload: PersonaImportPayload) -> dict[str, Any]:
+    persona_slug = _slugify(payload.name)
+    return {
+        "schema_version": "v2",
+        "manifest": {
+            "schema_version": "v1",
+            "source": "persona_import",
+            "pack_name": payload.name,
+            "checksum_sha256": "",
+        },
+        "config": {
+            "org_id": payload.orgId,
+            "persona_name": payload.name,
+            "role": payload.role,
+            "industry": payload.industry,
+            "description": payload.summary,
+        },
+        "selected_options": {
+            "personality_traits": payload.traits,
+            "communication_style": payload.communicationStyle,
+            "initiative_level": payload.initiativeLevel,
+            "tone": payload.tone,
+        },
+        "guidelines": {
+            "do_list": _split_lines(payload.doList),
+            "dont_list": _split_lines(payload.dontList),
+            "guardrails": _split_lines(payload.guardrails),
+        },
+        "assigned_tools": payload.tools,
+        "success_criteria": payload.headline or payload.summary,
+        "personas": [
+            {
+                "name": payload.name,
+                "slug": persona_slug,
+                "role": payload.role,
+                "scope": payload.scope,
+                "model_profile": payload.modelProfile,
+                "runtime_provider_id": "",
+                "runtime_model_id": "",
+                "system_prompt": payload.systemPromptOverride,
+            }
+        ],
+    }
+
+
+@router.post("/import/persona")
+def import_persona(
+    request: Request,
+    payload: PersonaImportPayload,
+    dry_run: bool = Query(default=False),
+) -> dict[str, Any]:
+    auth = require_authentication(request)
+    require_roles(auth, {"owner", "admin"})
+
+    bundle = _persona_import_to_pack(payload)
+    manifest = bundle.get("manifest", {}) if isinstance(bundle.get("manifest"), dict) else {}
+    checksum_body = {
+        "schema_version": bundle.get("schema_version", "v2"),
+        "config": bundle.get("config", {}),
+        "selected_options": bundle.get("selected_options", {}),
+        "guidelines": bundle.get("guidelines", {}),
+        "assigned_tools": bundle.get("assigned_tools", []),
+        "success_criteria": bundle.get("success_criteria", ""),
+        "personas": bundle.get("personas", []),
+    }
+    checksum_value = checksum_sha256(checksum_body)
+    bundle["manifest"] = {**manifest, "checksum_sha256": checksum_value}
+
+    extracted = prompt_catalog_store.extract_safe_pack_config(payload=bundle)
+    safety = prompt_catalog_store.safety_scan_pack(payload=bundle)
+
+    if dry_run:
+        return ok_response(
+            request,
+            data={
+                "dry_run": True,
+                "computed_checksum_sha256": checksum_value,
+                "extracted_config": extracted,
+                "safety_flags": safety,
+                "wizard_prefill": {
+                    "config": bundle.get("config", {}),
+                    "selected_options": bundle.get("selected_options", {}),
+                    "guidelines": bundle.get("guidelines", {}),
+                    "assigned_tools": bundle.get("assigned_tools", []),
+                    "personas": bundle.get("personas", []),
+                },
+            },
+        )
+
+    queued = prompt_catalog_store.enqueue_pack_review(
+        tenant_id=auth.tenant_id,
+        payload=bundle,
+        extracted_config=extracted,
+        safety_flags=safety,
+    )
+    return ok_response(
+        request,
+        data={
+            **queued,
+            "computed_checksum_sha256": checksum_value,
+            "wizard_prefill": {
+                "config": bundle.get("config", {}),
+                "selected_options": bundle.get("selected_options", {}),
+                "guidelines": bundle.get("guidelines", {}),
+                "assigned_tools": bundle.get("assigned_tools", []),
+                "personas": bundle.get("personas", []),
+            },
+        },
+    )
 
 
 @router.get("/templates/categories")

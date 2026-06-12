@@ -17,7 +17,7 @@ def _create_session(client: TestClient) -> str:
         headers=HEADERS,
         json={
             "runtime": {
-                "tenant_name": "kairos-dev",
+                "tenant_name": "myai-dev",
                 "connections": [
                     {
                         "id": "1",

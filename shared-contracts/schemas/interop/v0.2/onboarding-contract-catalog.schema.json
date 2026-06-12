@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kairos.dev/schemas/interop/v0.2/onboarding-contract-catalog.schema.json",
+  "$id": "https://myai.dev/schemas/interop/v0.2/onboarding-contract-catalog.schema.json",
   "title": "OnboardingContractCatalog",
   "type": "object",
   "additionalProperties": false,
@@ -31,7 +31,7 @@
             ]
           },
           "schema_ref": { "type": "string", "minLength": 1 },
-          "owner_repo": { "type": "string", "enum": ["kairos-core", "kairos-studio", "shared"] },
+          "owner_repo": { "type": "string", "enum": ["myai-core", "myai-studio", "shared"] },
           "phase": { "type": "string", "enum": ["core_bootstrap", "local_generation", "studio_configuration", "promotion"] }
         }
       }

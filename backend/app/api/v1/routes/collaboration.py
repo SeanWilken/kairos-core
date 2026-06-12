@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -9,6 +10,7 @@ from app.core.auth_context import AuthContext, require_authentication, require_r
 from app.core.collaboration_store import collaboration_store
 from app.core.response import ok_response
 from app.core.studio_store import studio_store
+from app.core.suite_store import suite_store
 
 router = APIRouter(prefix="/studio", tags=["studio-collaboration"])
 
@@ -65,6 +67,10 @@ class TaskCreatePayload(BaseModel):
     team_id: str | None = None
     visibility: str = Field(default="team_public")
     status: str = Field(default="todo")
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    related_node_ids: list[str] = Field(default_factory=list)
+    channel_id: str | None = None
 
 
 class TaskPatchPayload(BaseModel):
@@ -73,11 +79,92 @@ class TaskPatchPayload(BaseModel):
     team_id: str | None = None
     visibility: str | None = None
     status: str | None = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+    related_node_ids: list[str] | None = None
+    channel_id: str | None = None
 
 
 class TaskAssignmentCreatePayload(BaseModel):
     assignee_user_id: str = Field(min_length=1)
     status: str = "active"
+
+
+class WorkspaceCreatePayload(BaseModel):
+    org_id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    kind: str = Field(default="window")
+    description: str = ""
+    thread_binding: dict[str, Any] = Field(default_factory=dict)
+    state: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class WorkspacePatchPayload(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    status: str | None = None
+    thread_binding: dict[str, Any] | None = None
+    state: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class AppAccessGrantPayload(BaseModel):
+    org_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    app_id: str = Field(min_length=1)
+    role: str = "member"
+    feature_flags: list[str] = Field(default_factory=list)
+    status: str = "active"
+
+
+class ArtifactCreatePayload(BaseModel):
+    org_id: str = Field(min_length=1)
+    channel_id: str | None = None
+    workspace_id: str | None = None
+    orchestration_run_id: str = ""
+    message_id: str = ""
+    artifact_type: str = "markdown"
+    producer_type: str = "persona"
+    producer_id: str = ""
+    title: str = ""
+    content: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MeetingCreatePayload(BaseModel):
+    org_id: str = Field(min_length=1)
+    team_id: str | None = None
+    channel_id: str | None = None
+    title: str = Field(min_length=1)
+    description: str = ""
+    status: str = "scheduled"
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime
+    timezone: str = "UTC"
+    tags: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    agenda: list[str] = Field(default_factory=list)
+
+
+class MeetingPatchPayload(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+    team_id: str | None = None
+    channel_id: str | None = None
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    timezone: str | None = None
+    tags: list[str] | None = None
+    metadata: dict[str, Any] | None = None
+    agenda: list[str] | None = None
+
+
+class MeetingParticipantCreatePayload(BaseModel):
+    user_id: str = Field(min_length=1)
+    role: str = "attendee"
+    status: str = "invited"
 
 
 def _enforce_org_scope(auth: AuthContext, org_id: str) -> None:
@@ -448,15 +535,6 @@ def create_task(request: Request, payload: TaskCreatePayload) -> dict[str, Any]:
             },
         )
 
-    if payload.visibility == "team_public" and not payload.team_id:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "message": "team_id is required for team_public tasks.",
-                "details": {"reason_code": "TEAM_ID_REQUIRED"},
-            },
-        )
-
     if payload.team_id:
         team = collaboration_store.get_team(tenant_id=auth.tenant_id, team_id=payload.team_id)
         if team is None or team["org_id"] != payload.org_id:
@@ -474,6 +552,10 @@ def create_task(request: Request, payload: TaskCreatePayload) -> dict[str, Any]:
         visibility=payload.visibility,
         status=payload.status,
         team_id=payload.team_id,
+        tags=payload.tags,
+        metadata=payload.metadata,
+        related_node_ids=payload.related_node_ids,
+        channel_id=payload.channel_id,
     )
     return ok_response(request, data=task)
 
@@ -533,15 +615,6 @@ def patch_task(request: Request, task_id: str, payload: TaskPatchPayload) -> dic
         require_roles(auth, {"owner", "admin"})
         _enforce_org_scope(auth, existing["org_id"])
 
-    if payload.visibility == "team_public" and (payload.team_id is None and existing.get("team_id") is None):
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "message": "team_id is required for team_public tasks.",
-                "details": {"reason_code": "TEAM_ID_REQUIRED"},
-            },
-        )
-
     updated = collaboration_store.update_task(
         tenant_id=auth.tenant_id,
         task_id=task_id,
@@ -550,6 +623,10 @@ def patch_task(request: Request, task_id: str, payload: TaskPatchPayload) -> dic
         status=payload.status,
         visibility=payload.visibility,
         team_id=payload.team_id,
+        tags=payload.tags,
+        metadata=payload.metadata,
+        related_node_ids=payload.related_node_ids,
+        channel_id=payload.channel_id,
     )
     if updated is None:
         raise HTTPException(
@@ -607,3 +684,308 @@ def create_task_assignment(
         status=payload.status,
     )
     return ok_response(request, data=assignment)
+
+
+@router.post("/meetings")
+def create_meeting(request: Request, payload: MeetingCreatePayload) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, payload.org_id)
+    _require_org_exists(auth.tenant_id, payload.org_id)
+    if payload.scheduled_end_at <= payload.scheduled_start_at:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Meeting end time must be after start time.",
+                "details": {"reason_code": "MEETING_TIME_RANGE_INVALID"},
+            },
+        )
+    if payload.team_id:
+        team = collaboration_store.get_team(tenant_id=auth.tenant_id, team_id=payload.team_id)
+        if team is None or team["org_id"] != payload.org_id:
+            raise HTTPException(
+                status_code=404,
+                detail={"message": "Team not found.", "details": {"reason_code": "STUDIO_TEAM_NOT_FOUND"}},
+            )
+    if payload.channel_id:
+        channel = collaboration_store.get_channel(tenant_id=auth.tenant_id, channel_id=payload.channel_id)
+        if channel is None or channel["org_id"] != payload.org_id:
+            raise HTTPException(
+                status_code=404,
+                detail={"message": "Channel not found.", "details": {"reason_code": "STUDIO_CHANNEL_NOT_FOUND"}},
+            )
+    meeting = collaboration_store.create_meeting(
+        tenant_id=auth.tenant_id,
+        org_id=payload.org_id,
+        team_id=payload.team_id,
+        channel_id=payload.channel_id,
+        title=payload.title,
+        description=payload.description,
+        status=payload.status,
+        scheduled_start_at=payload.scheduled_start_at,
+        scheduled_end_at=payload.scheduled_end_at,
+        timezone_name=payload.timezone,
+        tags=payload.tags,
+        metadata=payload.metadata,
+        agenda=payload.agenda,
+        created_by_user_id=auth.user_id,
+    )
+    return ok_response(request, data=meeting)
+
+
+@router.get("/meetings")
+def list_meetings(
+    request: Request,
+    org_id: str = Query(min_length=1),
+    team_id: str | None = Query(default=None),
+    channel_id: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, org_id)
+    items = collaboration_store.list_meetings(
+        tenant_id=auth.tenant_id,
+        org_id=org_id,
+        team_id=team_id,
+        channel_id=channel_id,
+        status=status,
+    )
+    return ok_response(request, data={"items": items})
+
+
+@router.get("/meetings/{meeting_id}")
+def get_meeting(request: Request, meeting_id: str) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    item = collaboration_store.get_meeting(tenant_id=auth.tenant_id, meeting_id=meeting_id)
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Meeting not found.", "details": {"reason_code": "STUDIO_MEETING_NOT_FOUND"}},
+        )
+    _enforce_org_scope(auth, item["org_id"])
+    return ok_response(request, data=item)
+
+
+@router.patch("/meetings/{meeting_id}")
+def patch_meeting(request: Request, meeting_id: str, payload: MeetingPatchPayload) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    existing = collaboration_store.get_meeting(tenant_id=auth.tenant_id, meeting_id=meeting_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Meeting not found.", "details": {"reason_code": "STUDIO_MEETING_NOT_FOUND"}},
+        )
+    _enforce_org_scope(auth, existing["org_id"])
+    patch = payload.model_dump(exclude_unset=True)
+    start = patch.get("scheduled_start_at", None) or datetime.fromisoformat(existing["scheduled_start_at"])
+    end = patch.get("scheduled_end_at", None) or datetime.fromisoformat(existing["scheduled_end_at"])
+    if isinstance(start, datetime) and isinstance(end, datetime) and end <= start:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Meeting end time must be after start time.",
+                "details": {"reason_code": "MEETING_TIME_RANGE_INVALID"},
+            },
+        )
+    item = collaboration_store.update_meeting(
+        tenant_id=auth.tenant_id,
+        meeting_id=meeting_id,
+        patch=patch,
+    )
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Meeting not found.", "details": {"reason_code": "STUDIO_MEETING_NOT_FOUND"}},
+        )
+    return ok_response(request, data=item)
+
+
+@router.post("/meetings/{meeting_id}/participants")
+def create_meeting_participant(
+    request: Request,
+    meeting_id: str,
+    payload: MeetingParticipantCreatePayload,
+) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    meeting = collaboration_store.get_meeting(tenant_id=auth.tenant_id, meeting_id=meeting_id)
+    if meeting is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Meeting not found.", "details": {"reason_code": "STUDIO_MEETING_NOT_FOUND"}},
+        )
+    _enforce_org_scope(auth, meeting["org_id"])
+    user = studio_store.get_user(tenant_id=auth.tenant_id, user_id=payload.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "User not found.", "details": {"reason_code": "STUDIO_USER_NOT_FOUND"}},
+        )
+    item = collaboration_store.create_meeting_participant(
+        tenant_id=auth.tenant_id,
+        meeting_id=meeting_id,
+        user_id=payload.user_id,
+        role=payload.role,
+        status=payload.status,
+    )
+    return ok_response(request, data=item)
+
+
+@router.get("/meetings/{meeting_id}/participants")
+def list_meeting_participants(request: Request, meeting_id: str) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    meeting = collaboration_store.get_meeting(tenant_id=auth.tenant_id, meeting_id=meeting_id)
+    if meeting is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Meeting not found.", "details": {"reason_code": "STUDIO_MEETING_NOT_FOUND"}},
+        )
+    _enforce_org_scope(auth, meeting["org_id"])
+    items = collaboration_store.list_meeting_participants(tenant_id=auth.tenant_id, meeting_id=meeting_id)
+    return ok_response(request, data={"items": items})
+
+
+@router.post("/workspaces")
+def create_workspace(request: Request, payload: WorkspaceCreatePayload) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, payload.org_id)
+    _require_org_exists(auth.tenant_id, payload.org_id)
+    item = suite_store.create_workspace(
+        tenant_id=auth.tenant_id,
+        org_id=payload.org_id,
+        name=payload.name,
+        kind=payload.kind,
+        description=payload.description,
+        thread_binding=payload.thread_binding,
+        state=payload.state,
+        metadata=payload.metadata,
+        created_by_user_id=auth.user_id,
+    )
+    return ok_response(request, data=item)
+
+
+@router.get("/workspaces")
+def list_workspaces(
+    request: Request,
+    org_id: str = Query(min_length=1),
+    status: str = Query(default="active"),
+) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, org_id)
+    items = suite_store.list_workspaces(tenant_id=auth.tenant_id, org_id=org_id, status=status)
+    return ok_response(request, data={"items": items})
+
+
+@router.get("/workspaces/{workspace_id}")
+def get_workspace(request: Request, workspace_id: str) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    item = suite_store.get_workspace(tenant_id=auth.tenant_id, workspace_id=workspace_id)
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Workspace not found.", "details": {"reason_code": "WORKSPACE_NOT_FOUND"}},
+        )
+    _enforce_org_scope(auth, item["org_id"])
+    return ok_response(request, data=item)
+
+
+@router.patch("/workspaces/{workspace_id}")
+def patch_workspace(request: Request, workspace_id: str, payload: WorkspacePatchPayload) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    existing = suite_store.get_workspace(tenant_id=auth.tenant_id, workspace_id=workspace_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Workspace not found.", "details": {"reason_code": "WORKSPACE_NOT_FOUND"}},
+        )
+    _enforce_org_scope(auth, existing["org_id"])
+    patch = payload.model_dump(exclude_unset=True)
+    item = suite_store.update_workspace(
+        tenant_id=auth.tenant_id,
+        workspace_id=workspace_id,
+        patch=patch,
+    )
+    if item is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"message": "Workspace not found.", "details": {"reason_code": "WORKSPACE_NOT_FOUND"}},
+        )
+    return ok_response(request, data=item)
+
+
+@router.post("/app-access-grants")
+def upsert_app_access_grant(request: Request, payload: AppAccessGrantPayload) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    require_roles(auth, {"owner", "admin"})
+    _enforce_org_scope(auth, payload.org_id)
+    _require_org_exists(auth.tenant_id, payload.org_id)
+    item = suite_store.upsert_app_access_grant(
+        tenant_id=auth.tenant_id,
+        org_id=payload.org_id,
+        user_id=payload.user_id,
+        app_id=payload.app_id,
+        role=payload.role,
+        feature_flags=payload.feature_flags,
+        status=payload.status,
+        granted_by_user_id=auth.user_id,
+    )
+    return ok_response(request, data=item)
+
+
+@router.get("/app-access-grants")
+def list_app_access_grants(
+    request: Request,
+    org_id: str = Query(min_length=1),
+    user_id: str | None = Query(default=None),
+) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, org_id)
+    items = suite_store.list_app_access_grants(
+        tenant_id=auth.tenant_id,
+        org_id=org_id,
+        user_id=user_id,
+    )
+    return ok_response(request, data={"items": items})
+
+
+@router.post("/artifacts")
+def create_artifact(request: Request, payload: ArtifactCreatePayload) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, payload.org_id)
+    _require_org_exists(auth.tenant_id, payload.org_id)
+    item = suite_store.create_artifact(
+        tenant_id=auth.tenant_id,
+        org_id=payload.org_id,
+        channel_id=payload.channel_id,
+        workspace_id=payload.workspace_id,
+        orchestration_run_id=payload.orchestration_run_id,
+        message_id=payload.message_id,
+        artifact_type=payload.artifact_type,
+        producer_type=payload.producer_type,
+        producer_id=payload.producer_id,
+        title=payload.title,
+        content=payload.content,
+        metadata=payload.metadata,
+        created_by_user_id=auth.user_id,
+    )
+    return ok_response(request, data=item)
+
+
+@router.get("/artifacts")
+def list_artifacts(
+    request: Request,
+    org_id: str = Query(min_length=1),
+    channel_id: str | None = Query(default=None),
+    workspace_id: str | None = Query(default=None),
+    artifact_type: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=True)
+    _enforce_org_scope(auth, org_id)
+    items = suite_store.list_artifacts(
+        tenant_id=auth.tenant_id,
+        org_id=org_id,
+        channel_id=channel_id,
+        workspace_id=workspace_id,
+        artifact_type=artifact_type,
+        limit=limit,
+    )
+    return ok_response(request, data={"items": items})

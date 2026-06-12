@@ -89,6 +89,18 @@ class StudioStore:
             "updated_at": _dt_iso(model.updated_at),
         }
 
+    def _default_org_settings_dict(self, *, tenant_id: str, org_id: str) -> dict[str, Any]:
+        now = _dt_iso(datetime.now(timezone.utc))
+        return {
+            "setting_id": "",
+            "tenant_id": tenant_id,
+            "org_id": org_id,
+            "settings": {},
+            "updated_by_user_id": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+
     def _to_onboarding_dict(self, model: StudioOrgOnboardingModel) -> dict[str, Any]:
         return {
             "tenant_id": model.tenant_id,
@@ -335,6 +347,24 @@ class StudioStore:
             ).all()
             return [self._to_org_dict(row) for row in rows]
 
+    def resolve_organization_identifier(self, *, tenant_id: str, identifier: str) -> dict[str, Any] | None:
+        value = str(identifier or "").strip()
+        if not value:
+            return None
+        lowered = value.lower()
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(StudioOrganizationModel).where(StudioOrganizationModel.tenant_id == tenant_id)
+            ).all()
+            for row in rows:
+                if row.org_id == value:
+                    return self._to_org_dict(row)
+                if str(row.slug or "").strip().lower() == lowered:
+                    return self._to_org_dict(row)
+                if str(row.name or "").strip().lower() == lowered:
+                    return self._to_org_dict(row)
+        return None
+
     def get_organization(self, *, tenant_id: str, org_id: str) -> dict[str, Any] | None:
         with SessionLocal() as db:
             model = db.scalar(
@@ -420,6 +450,15 @@ class StudioStore:
 
     def get_org_settings(self, *, tenant_id: str, org_id: str) -> dict[str, Any]:
         with SessionLocal() as db:
+            org = db.scalar(
+                select(StudioOrganizationModel).where(
+                    StudioOrganizationModel.tenant_id == tenant_id,
+                    StudioOrganizationModel.org_id == org_id,
+                )
+            )
+            if org is None:
+                return self._default_org_settings_dict(tenant_id=tenant_id, org_id=org_id)
+
             model = db.scalar(
                 select(StudioOrgSettingModel).where(
                     StudioOrgSettingModel.tenant_id == tenant_id,
@@ -451,6 +490,15 @@ class StudioStore:
         updated_by_user_id: str,
     ) -> dict[str, Any]:
         with SessionLocal() as db:
+            org = db.scalar(
+                select(StudioOrganizationModel).where(
+                    StudioOrganizationModel.tenant_id == tenant_id,
+                    StudioOrganizationModel.org_id == org_id,
+                )
+            )
+            if org is None:
+                raise ValueError("organization_not_found")
+
             model = db.scalar(
                 select(StudioOrgSettingModel).where(
                     StudioOrgSettingModel.tenant_id == tenant_id,

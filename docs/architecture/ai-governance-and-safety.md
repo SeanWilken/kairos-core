@@ -1,6 +1,6 @@
 # AI Governance and Safety Baseline
 
-This document defines the baseline governance and safety posture for Kairos Core.
+This document defines the baseline governance and safety posture for MyAI Core.
 
 ## Goals
 
@@ -38,7 +38,7 @@ This document defines the baseline governance and safety posture for Kairos Core
 
 ## Prompt injection and jailbreak posture
 
-Kairos Core assumes prompt injection will happen in user-facing systems.
+MyAI Core assumes prompt injection will happen in user-facing systems.
 Core integrations should follow these rules:
 
 - never treat user text as trusted system instructions

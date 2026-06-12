@@ -18,7 +18,7 @@ def test_bootstrap_session_create_and_get_contract() -> None:
         headers=HEADERS,
         json={
             "runtime": {
-                "tenant_name": "kairos-dev",
+                "tenant_name": "myai-dev",
                 "connections": [
                     {
                         "id": "1",
@@ -60,7 +60,7 @@ def test_bootstrap_session_list_and_latest_contract() -> None:
         "/v1/bootstrap/sessions",
         headers=HEADERS,
         json={
-            "runtime": {"tenant_name": "kairos-a"},
+            "runtime": {"tenant_name": "myai-a"},
             "deployment": {"infra_components": ["core_api"]},
         },
     )
@@ -71,7 +71,7 @@ def test_bootstrap_session_list_and_latest_contract() -> None:
         "/v1/bootstrap/sessions",
         headers=HEADERS,
         json={
-            "runtime": {"tenant_name": "kairos-b"},
+            "runtime": {"tenant_name": "myai-b"},
             "deployment": {"infra_components": ["core_api"]},
         },
     )

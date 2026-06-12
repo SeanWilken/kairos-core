@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from app.core.tool_provider_registry import get_ai_provider_catalog
+
 
 def _normalize_provider(provider_id: str | None, capability: str) -> str:
     direct = str(provider_id or "").strip().lower()
@@ -22,6 +24,7 @@ def _normalize_provider(provider_id: str | None, capability: str) -> str:
 def get_tool_provider_status() -> dict[str, Any]:
     image_provider = _normalize_provider(None, "image_generation")
     email_provider = _normalize_provider(None, "email_send")
+    catalog = get_ai_provider_catalog()
     return {
         "image_generation": {
             "selected_provider": image_provider,
@@ -33,6 +36,9 @@ def get_tool_provider_status() -> dict[str, Any]:
             "smtp_configured": bool(os.getenv("EMAIL_SMTP_HOST", "").strip()),
             "sendgrid_configured": bool(os.getenv("SENDGRID_API_KEY", "").strip()),
         },
+        "providers": catalog.get("providers", []),
+        "routing": catalog.get("routing", {}),
+        "configured_provider_ids": catalog.get("configured_provider_ids", []),
     }
 
 

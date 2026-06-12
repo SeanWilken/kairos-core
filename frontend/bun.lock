@@ -3,9 +3,9 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "kairos-core-frontend",
+      "name": "myai-core-frontend",
       "dependencies": {
-        "@kairosstack/ui": "^0.1.3-alpha.1",
+        "@myai-tech/myui": "^0.1.3-alpha.7",
         "@tanstack/react-query": "^5.51.0",
         "lucide-react": "^0.539.0",
         "react": "^18.3.1",
@@ -156,7 +156,7 @@
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
-    "@kairosstack/ui": ["@kairosstack/ui@0.1.3-alpha.1", "", { "dependencies": { "@radix-ui/react-accordion": "1.2.3", "@radix-ui/react-alert-dialog": "1.1.6", "@radix-ui/react-avatar": "1.1.3", "@radix-ui/react-checkbox": "1.1.4", "@radix-ui/react-collapsible": "1.1.3", "@radix-ui/react-context-menu": "2.2.6", "@radix-ui/react-dialog": "1.1.6", "@radix-ui/react-dropdown-menu": "2.1.6", "@radix-ui/react-hover-card": "1.1.6", "@radix-ui/react-label": "2.1.2", "@radix-ui/react-menubar": "1.1.6", "@radix-ui/react-navigation-menu": "1.2.5", "@radix-ui/react-popover": "1.1.6", "@radix-ui/react-progress": "1.1.2", "@radix-ui/react-radio-group": "1.2.3", "@radix-ui/react-scroll-area": "1.2.3", "@radix-ui/react-select": "2.1.6", "@radix-ui/react-separator": "1.1.2", "@radix-ui/react-slider": "1.2.3", "@radix-ui/react-slot": "1.1.2", "@radix-ui/react-switch": "1.1.3", "@radix-ui/react-tabs": "1.1.3", "@radix-ui/react-toggle": "1.1.2", "@radix-ui/react-toggle-group": "1.1.2", "@radix-ui/react-tooltip": "1.1.8", "class-variance-authority": "0.7.1", "clsx": "2.1.1", "cmdk": "1.1.1", "embla-carousel-react": "8.6.0", "input-otp": "1.4.2", "lucide-react": "0.487.0", "motion": "12.23.24", "react-day-picker": "8.10.1", "react-hook-form": "7.55.0", "react-resizable-panels": "2.1.7", "recharts": "2.15.2", "sonner": "2.0.3", "tailwind-merge": "3.2.0", "tw-animate-css": "1.3.8", "vaul": "1.1.2" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18", "tailwindcss": ">=4" }, "optionalPeers": ["tailwindcss"] }, "sha512-ljQrnFyEwGiKxJKPkHbti0EFRtqEm68uDzIsIUOK2aFfcMc5kw/ztws/t6P9c4oM/EtA08TNPAhe1gTo5Qlx5g=="],
+    "@myai-tech/myui": ["@myai-tech/myui@0.1.3-alpha.9", "", { "dependencies": { "@radix-ui/react-accordion": "1.2.3", "@radix-ui/react-alert-dialog": "1.1.6", "@radix-ui/react-avatar": "1.1.3", "@radix-ui/react-checkbox": "1.1.4", "@radix-ui/react-collapsible": "1.1.3", "@radix-ui/react-context-menu": "2.2.6", "@radix-ui/react-dialog": "1.1.6", "@radix-ui/react-dropdown-menu": "2.1.6", "@radix-ui/react-hover-card": "1.1.6", "@radix-ui/react-label": "2.1.2", "@radix-ui/react-menubar": "1.1.6", "@radix-ui/react-navigation-menu": "1.2.5", "@radix-ui/react-popover": "1.1.6", "@radix-ui/react-progress": "1.1.2", "@radix-ui/react-radio-group": "1.2.3", "@radix-ui/react-scroll-area": "1.2.3", "@radix-ui/react-select": "2.1.6", "@radix-ui/react-separator": "1.1.2", "@radix-ui/react-slider": "1.2.3", "@radix-ui/react-slot": "1.1.2", "@radix-ui/react-switch": "1.1.3", "@radix-ui/react-tabs": "1.1.3", "@radix-ui/react-toggle": "1.1.2", "@radix-ui/react-toggle-group": "1.1.2", "@radix-ui/react-tooltip": "1.1.8", "class-variance-authority": "0.7.1", "clsx": "2.1.1", "cmdk": "1.1.1", "embla-carousel-react": "8.6.0", "input-otp": "1.4.2", "lucide-react": "0.487.0", "motion": "12.23.24", "react-day-picker": "8.10.1", "react-hook-form": "7.55.0", "react-resizable-panels": "2.1.7", "recharts": "2.15.2", "sonner": "2.0.3", "tailwind-merge": "3.2.0", "tw-animate-css": "1.3.8", "vaul": "1.1.2" }, "peerDependencies": { "react": ">=18", "react-dom": ">=18", "tailwindcss": ">=4" }, "optionalPeers": ["tailwindcss"] }, "sha512-BkVzFClfOs3mHVbqZ6zsut/4sM3H6pLLAM4PZM7OAcNy6CFmYg3QNLpEJxk214ibJ4SpSvRp1gOgrFAn7W02IA=="],
 
     "@radix-ui/number": ["@radix-ui/number@1.1.0", "", {}, "sha512-V3gRzhVNU1ldS5XhAPTom1fOIo4ccrjjJgmE+LI2h/WaFpHmx0MQApT+KZHnx8abG6Avtfcz4WoEciMnpFT3HQ=="],
 
@@ -738,7 +738,7 @@
 
     "@eslint-community/eslint-utils/eslint-visitor-keys": ["eslint-visitor-keys@3.4.3", "", {}, "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag=="],
 
-    "@kairosstack/ui/lucide-react": ["lucide-react@0.487.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-aKqhOQ+YmFnwq8dWgGjOuLc8V1R9/c/yOd+zDY4+ohsR2Jo05lSGc3WsstYPIzcTpeosN7LoCkLReUUITvaIvw=="],
+    "@myai-tech/myui/lucide-react": ["lucide-react@0.487.0", "", { "peerDependencies": { "react": "^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0" } }, "sha512-aKqhOQ+YmFnwq8dWgGjOuLc8V1R9/c/yOd+zDY4+ohsR2Jo05lSGc3WsstYPIzcTpeosN7LoCkLReUUITvaIvw=="],
 
     "@tailwindcss/oxide-wasm32-wasi/@emnapi/core": ["@emnapi/core@1.9.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" }, "bundled": true }, "sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA=="],
 

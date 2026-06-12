@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import { Checkbox, cn } from "@kairosstack/ui";
+import { Checkbox, cn } from "@myai-tech/myui";
 
 import type { StepProps } from "../types";
 

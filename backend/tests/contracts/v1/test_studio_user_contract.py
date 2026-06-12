@@ -8,7 +8,7 @@ def _create_org(client: TestClient, headers: dict[str, str]) -> str:
     response = client.post(
         "/v1/studio/organizations",
         headers=headers,
-        json={"name": "Kairos Labs", "slug": "kairos-labs", "mode": "team"},
+        json={"name": "MyAI Labs", "slug": "myai-labs", "mode": "team"},
     )
     assert response.status_code == 200
     return response.json()["data"]["org_id"]
@@ -23,7 +23,7 @@ def test_studio_user_create_and_get_contract() -> None:
         "/v1/studio/users",
         headers=headers,
         json={
-            "email": "owner@kairos.dev",
+            "email": "owner@myai.dev",
             "first_name": "Global",
             "last_name": "Admin",
             "org_id": org_id,
@@ -36,7 +36,7 @@ def test_studio_user_create_and_get_contract() -> None:
     create_body = create_response.json()
     assert set(create_body.keys()) == {"meta", "data", "error"}
     assert create_body["error"] is None
-    assert create_body["data"]["email"] == "owner@kairos.dev"
+    assert create_body["data"]["email"] == "owner@myai.dev"
     assert create_body["data"]["membership"]["org_id"] == org_id
 
     user_id = create_body["data"]["user_id"]
@@ -58,7 +58,7 @@ def test_studio_user_list_and_duplicate_contract() -> None:
         "/v1/studio/users",
         headers=headers,
         json={
-            "email": "operator@kairos.dev",
+            "email": "operator@myai.dev",
             "first_name": "Ops",
             "last_name": "One",
             "org_id": org_id,
@@ -70,7 +70,7 @@ def test_studio_user_list_and_duplicate_contract() -> None:
         "/v1/studio/users",
         headers=headers,
         json={
-            "email": "operator@kairos.dev",
+            "email": "operator@myai.dev",
             "first_name": "Ops",
             "last_name": "Two",
             "org_id": org_id,
@@ -84,7 +84,7 @@ def test_studio_user_list_and_duplicate_contract() -> None:
     assert listed.status_code == 200
     listed_body = listed.json()
     assert isinstance(listed_body["data"]["items"], list)
-    assert any(item["email"] == "operator@kairos.dev" for item in listed_body["data"]["items"])
+    assert any(item["email"] == "operator@myai.dev" for item in listed_body["data"]["items"])
 
 
 def test_global_admin_can_be_created_without_org_contract() -> None:
@@ -95,7 +95,7 @@ def test_global_admin_can_be_created_without_org_contract() -> None:
         "/v1/studio/users",
         headers=headers,
         json={
-            "email": "global@kairos.dev",
+            "email": "global@myai.dev",
             "first_name": "Global",
             "last_name": "Owner",
             "is_global_admin": True,
@@ -117,7 +117,7 @@ def test_non_global_user_without_org_is_rejected_contract() -> None:
         "/v1/studio/users",
         headers=headers,
         json={
-            "email": "member@kairos.dev",
+            "email": "member@myai.dev",
             "first_name": "Local",
             "last_name": "Member",
             "is_global_admin": False,

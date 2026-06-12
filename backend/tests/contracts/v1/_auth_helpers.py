@@ -8,7 +8,7 @@ def register_and_login(
     *,
     tenant_id: str = "tenant0",
     org_id: str | None = None,
-    email: str = "bootstrap.admin@kairos.dev",
+    email: str = "bootstrap.admin@myai.dev",
     password: str = "Password123!",
     is_global_admin: bool = True,
     scope_org_id: str | None = None,

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kairos.dev/schemas/interop/v0.2/studio-workflow-definition.schema.json",
+  "$id": "https://myai.dev/schemas/interop/v0.2/studio-workflow-definition.schema.json",
   "title": "StudioWorkflowDefinition",
   "type": "object",
   "additionalProperties": false,

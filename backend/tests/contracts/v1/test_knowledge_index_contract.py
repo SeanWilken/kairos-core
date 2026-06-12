@@ -6,7 +6,7 @@ from tests.contracts.v1._auth_helpers import register_and_login
 
 def test_knowledge_index_domain_node_edge_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="knowledge.owner@kairos.dev")
+    headers = register_and_login(client, email="knowledge.owner@myai.dev")
 
     org = client.post(
         "/v1/studio/organizations",

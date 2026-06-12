@@ -1,6 +1,6 @@
 # Studio API Availability Matrix (Core Reference)
 
-This document is the current handoff reference for `kairos-studio` integration against `kairos-core` backend APIs.
+This document is the current handoff reference for `myai-studio` integration against `myai-core` backend APIs.
 
 ## Integration concerns + immediate next steps (Studio handoff)
 

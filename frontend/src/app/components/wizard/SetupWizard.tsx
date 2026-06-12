@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { ArrowRight, CheckCheck } from "lucide-react";
-import { Badge, Button } from "@kairosstack/ui";
+import { Badge, Button } from "@myai-tech/myui";
 
 import { INITIAL_STATE, RUNTIME_WIZARD_STEP_IDS, STEP_DEFS, STEP_HEADER } from "./constants";
 import { StepSidebar } from "./common";

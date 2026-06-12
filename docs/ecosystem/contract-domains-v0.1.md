@@ -1,6 +1,6 @@
 # Contract Domains v0.1
 
-This document defines the core contract objects expected across Kairos integrations.
+This document defines the core contract objects expected across MyAI integrations.
 
 ## 1) ModelProfile
 

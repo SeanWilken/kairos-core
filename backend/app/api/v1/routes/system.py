@@ -11,6 +11,7 @@ from app.core.fallback_store import fallback_store
 from app.core.onboarding_store import onboarding_store
 from app.core.model_gateway_policy_store import model_gateway_policy_store
 from app.core.prompt_template_store import prompt_template_store
+from app.core.prompt_template_runtime import resolve_rendered_prompt_template
 from app.core.resume_adapter_policy_store import resume_adapter_policy_store
 from app.core.request_context import require_request_scope
 from app.core.response import ok_response
@@ -58,6 +59,26 @@ class ModelGatewayPolicyPayload(BaseModel):
     org_id: str = Field(min_length=1)
     name: str = Field(default="default", min_length=1)
     config: dict[str, Any] = Field(default_factory=dict)
+
+
+class PromptTemplateRenderPreviewPayload(BaseModel):
+    provider_id: str = Field(min_length=1)
+    template_kind: str = Field(min_length=1)
+    org_id: str | None = None
+    division_id: str | None = None
+    team_id: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+PROMPT_TEMPLATE_RUNTIME_KINDS = ["system_prompt"]
+PROMPT_TEMPLATE_EDITABLE_KINDS = [
+    "system_prompt",
+    "planner_prompt",
+    "tool_call_prompt",
+    "reflection_prompt",
+    "focus_group_prompt",
+    "tasking_prompt",
+]
 
 
 @router.get("/system/status")
@@ -389,6 +410,51 @@ def resolve_prompt_template(
         },
     )
     return ok_response(request, data=item or {})
+
+
+@router.get("/system/prompt-templates/capabilities")
+def get_prompt_template_capabilities(request: Request) -> dict[str, Any]:
+    require_authentication(request)
+    catalog = get_ai_provider_catalog()
+    providers = [
+        {
+            "provider_id": str(item.get("provider_id", "")),
+            "configured": bool(item.get("configured", False)),
+            "default_chat_model": str((item.get("default_models", {}) or {}).get("chat", "")),
+        }
+        for item in catalog.get("providers", [])
+        if isinstance(item, dict)
+    ]
+    return ok_response(
+        request,
+        data={
+            "providers": providers,
+            "runtime_supported_template_kinds": PROMPT_TEMPLATE_RUNTIME_KINDS,
+            "editable_template_kinds": PROMPT_TEMPLATE_EDITABLE_KINDS,
+            "scope_levels": ["tenant", "org", "division", "team"],
+        },
+    )
+
+
+@router.post("/system/prompt-templates/render-preview")
+def render_prompt_template_preview(
+    request: Request,
+    payload: PromptTemplateRenderPreviewPayload,
+) -> dict[str, Any]:
+    auth = require_authentication(request)
+    rendered = resolve_rendered_prompt_template(
+        tenant_id=auth.tenant_id,
+        provider_id=payload.provider_id.strip().lower(),
+        template_kind=payload.template_kind.strip(),
+        scopes={
+            "team": str(payload.team_id or ""),
+            "division": str(payload.division_id or ""),
+            "org": str(payload.org_id or auth.org_id or ""),
+            "tenant": auth.tenant_id,
+        },
+        context=payload.context,
+    )
+    return ok_response(request, data={"rendered": rendered})
 
 
 @router.get("/system/model-gateway-policies")

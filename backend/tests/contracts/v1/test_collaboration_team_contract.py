@@ -6,7 +6,7 @@ from tests.contracts.v1._auth_helpers import register_and_login
 
 def test_division_team_and_team_membership_contract() -> None:
     client = TestClient(app)
-    admin_headers = register_and_login(client, email="admin+team@kairos.dev")
+    admin_headers = register_and_login(client, email="admin+team@myai.dev")
 
     org_response = client.post(
         "/v1/studio/organizations",
@@ -58,7 +58,7 @@ def test_division_team_and_team_membership_contract() -> None:
 
     member_headers = register_and_login(
         client,
-        email="member+team@kairos.dev",
+        email="member+team@myai.dev",
         is_global_admin=False,
         org_id=org_id,
         scope_org_id=org_id,

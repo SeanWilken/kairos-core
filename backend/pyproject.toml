@@ -3,9 +3,9 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "kairos-core-backend"
+name = "myai-core-backend"
 version = "0.1.0"
-description = "Backend scaffold for Kairos Core"
+description = "Backend scaffold for MyAI Core"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -18,7 +18,10 @@ dependencies = [
   "psycopg[binary]>=3.2.0",
   "pgvector>=0.3.0",
   "langgraph>=0.2.0",
-  "python-dotenv>=1.0.0"
+  "python-dotenv>=1.0.0",
+  "python-multipart>=0.0.9",
+  "boto3>=1.35.0",
+  "pypdf>=4.3.1"
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, ChevronRight, Circle } from "lucide-react";
-import { Button, Input, Progress, cn } from "@kairosstack/ui";
+import { Button, Input, Progress, cn } from "@myai-tech/myui";
 
 type SidebarStep = {
   id: number;

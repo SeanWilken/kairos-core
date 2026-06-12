@@ -13,6 +13,13 @@ def test_tools_image_and_email_contract() -> None:
     provider_data = provider_status.json()["data"]
     assert isinstance(provider_data.get("image_generation"), dict)
     assert isinstance(provider_data.get("email_send"), dict)
+    assert isinstance(provider_data.get("providers"), list)
+    google_provider = next(
+        (item for item in provider_data.get("providers", []) if item.get("provider_id") == "google"),
+        {},
+    )
+    google_tools = google_provider.get("tools", []) if isinstance(google_provider, dict) else []
+    assert any(tool.get("tool_id") == "nano_banana" for tool in google_tools if isinstance(tool, dict))
 
     image_response = client.post(
         "/v1/tools/image/generate",
@@ -35,7 +42,7 @@ def test_tools_image_and_email_contract() -> None:
         headers=auth_headers,
         json={
             "org_id": "org0",
-            "sender": "noreply@kairos.dev",
+            "sender": "noreply@myai.dev",
             "recipients": ["user@example.com"],
             "subject": "Test",
             "body": "Hello from tools API",

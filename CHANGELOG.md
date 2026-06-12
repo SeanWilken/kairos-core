@@ -25,11 +25,11 @@ The format is based on Keep a Changelog.
 - Added charter and governance documentation to align repo intent with modular ecosystem goals.
 - Expanded interop and contract docs with concrete domain contract objects.
 - Added AI safety and prompt-injection posture notes for user-facing integrations.
-- Rebranded project naming to Kairos Core across backend/frontend/tooling and ecosystem docs.
+- Rebranded project naming to MyAI Core across backend/frontend/tooling and ecosystem docs.
 - Fixed CI OpenAPI export execution by resolving backend module path and running export with backend virtual environment Python.
 - .gitattributes added for json eol=lf 
 - Added bootstrap target capability schemas and a core setup wizard capability matrix with execution-mode gating and experimental target disclaimers.
-- Added a Studio-aligned frontend shell and routing scaffold for Kairos Core setup flows.
+- Added a Studio-aligned frontend shell and routing scaffold for MyAI Core setup flows.
 - Added a modularized setup wizard architecture (`types`, `constants`, `helpers`, shared `common`, per-step components) to replace the monolithic prototype.
 - Reordered setup flow to runtime -> deployment -> secrets -> vector -> preflight -> artifacts -> runtime verify + docs -> review, with required gating between phases.
 - Added runtime verification checks and locked document bootstrap behind successful required runtime checks.
@@ -38,7 +38,7 @@ The format is based on Keep a Changelog.
 - Added frontend style pipeline (`index.css`, `tailwind.css`, `theme.css`) and Vite React dedupe/alias configuration for shared UI integration.
 - Fixed dropdown trigger ref warnings by replacing `DropdownMenuTrigger asChild` usage with native `button` triggers in the shell header.
 - Added `lucide-react` frontend dependency and excluded legacy `src/wizard-test.tsx` from TypeScript compile inputs.
-- Added Tailwind source scanning for `@kairosstack/ui` package classes in frontend styling configuration.
+- Added Tailwind source scanning for `@myai-tech/myui` package classes in frontend styling configuration.
 - Added frontend overlay style overrides for select/dropdown content layering, opacity, option spacing, and trigger-width alignment.
 - Updated frontend README with current setup notes and full-step setup wizard screenshots.
 - Added v0.2 draft onboarding and Studio interop schemas covering bootstrap sessions, runtime checks, ingest jobs, runtime handoff, organization config, persona profiles, tool integrations, workflow definitions, and environment promotion.
@@ -60,7 +60,7 @@ The format is based on Keep a Changelog.
 - Added repository Docker build support for both backend and frontend (`backend/Dockerfile`, `frontend/Dockerfile`) with `.dockerignore` files for local compose reference.
 - Added draft initial SQL migration for bootstrap/runtime/ingest persistence (`backend/migrations/0001_initial_onboarding.sql`).
 - Fixed runtime verify API flow to create/reuse a real bootstrap `session_id` and query system endpoints with that session ID instead of check names.
-- Updated generated compose templates with optional `kros_core_frontend`, `kros_studio_frontend`, and `kros_council_frontend` service stubs for future plug-and-play UI images.
+- Updated generated compose templates with optional `myai_core_frontend`, `myai_studio_frontend`, and `myai_council_frontend` service stubs for future plug-and-play UI images.
 - Added bootstrap session resume endpoint (`GET /v1/bootstrap/sessions?latest=true`) and frontend runtime-check logic to reuse existing scoped sessions when available.
 - Added generated migration helper scripts (`migrate-db.sh`, `migrate-db.ps1`) for applying initial onboarding tables to local postgres containers.
 - Added initial Core onboarding endpoints for bootstrap sessions, runtime status/check execution, and ingest job lifecycle with v1 envelope responses and tenant/org scope enforcement.

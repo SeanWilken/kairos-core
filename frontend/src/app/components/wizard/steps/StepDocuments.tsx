@@ -1,5 +1,5 @@
 import { FileText, FileUp, Layers } from "lucide-react";
-import { Button, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, cn } from "@kairosstack/ui";
+import { Button, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch, cn } from "@myai-tech/myui";
 
 import type { StepProps } from "../types";
 
@@ -50,11 +50,11 @@ export function StepDocuments({ state, update }: StepProps) {
               <Label>Chunking Profile</Label>
               <Select value={state.chunking_profile} onValueChange={(v) => update({ chunking_profile: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent className="kairos-overlay-content kairos-select-content">
-                  <SelectItem value="recursive_512" className="kairos-overlay-item">recursive_512 (default)</SelectItem>
-                  <SelectItem value="markdown_sections" className="kairos-overlay-item">markdown_sections</SelectItem>
-                  <SelectItem value="sentence_window" className="kairos-overlay-item">sentence_window</SelectItem>
-                  <SelectItem value="fixed_256" className="kairos-overlay-item">fixed_256</SelectItem>
+                <SelectContent className="myai-overlay-content myai-select-content">
+                  <SelectItem value="recursive_512" className="myai-overlay-item">recursive_512 (default)</SelectItem>
+                  <SelectItem value="markdown_sections" className="myai-overlay-item">markdown_sections</SelectItem>
+                  <SelectItem value="sentence_window" className="myai-overlay-item">sentence_window</SelectItem>
+                  <SelectItem value="fixed_256" className="myai-overlay-item">fixed_256</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -62,11 +62,11 @@ export function StepDocuments({ state, update }: StepProps) {
               <Label>Embedding Profile</Label>
               <Select value={state.embedding_profile} onValueChange={(v) => update({ embedding_profile: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent className="kairos-overlay-content kairos-select-content">
-                  <SelectItem value="default" className="kairos-overlay-item">default (provider default)</SelectItem>
-                  <SelectItem value="text-embedding-3-small" className="kairos-overlay-item">text-embedding-3-small</SelectItem>
-                  <SelectItem value="text-embedding-3-large" className="kairos-overlay-item">text-embedding-3-large</SelectItem>
-                  <SelectItem value="nomic-embed-text" className="kairos-overlay-item">nomic-embed-text (local)</SelectItem>
+                <SelectContent className="myai-overlay-content myai-select-content">
+                  <SelectItem value="default" className="myai-overlay-item">default (provider default)</SelectItem>
+                  <SelectItem value="text-embedding-3-small" className="myai-overlay-item">text-embedding-3-small</SelectItem>
+                  <SelectItem value="text-embedding-3-large" className="myai-overlay-item">text-embedding-3-large</SelectItem>
+                  <SelectItem value="nomic-embed-text" className="myai-overlay-item">nomic-embed-text (local)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

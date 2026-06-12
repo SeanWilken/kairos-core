@@ -266,8 +266,32 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
   env += `CORE_API_IMAGE=${selectedCoreImage}\n\n`;
   if (state.infra_components.includes("myai_de_api")) {
     env += "# Optional myAIDE server\n";
-    env += "MYAI_DE_API_IMAGE=myaitech/myai-de-api:stable\n";
+    env += "MYAI_DE_API_IMAGE=myaitech/myai-de-api:local\n";
     env += "MYAI_DE_API_PORT=8010\n\n";
+  }
+  if (state.frontend_services.length) {
+    env += "# Frontend images\n";
+    if (state.frontend_services.includes("myai_core_frontend")) {
+      env += "CORE_FRONTEND_IMAGE=myaitech/myai-core-frontend:local\n";
+      env += "CORE_FRONTEND_PORT=8080\n";
+    }
+    if (state.frontend_services.includes("myai_studio_frontend")) {
+      env += "STUDIO_FRONTEND_IMAGE=myaitech/myai-studio-frontend:local\n";
+      env += "STUDIO_FRONTEND_PORT=8081\n";
+    }
+    if (state.frontend_services.includes("myai_council_frontend")) {
+      env += "COUNCIL_FRONTEND_IMAGE=myaitech/myai-council-frontend:local\n";
+      env += "COUNCIL_FRONTEND_PORT=8082\n";
+    }
+    if (state.frontend_services.includes("myai_de_frontend")) {
+      env += "MYAI_DE_FRONTEND_IMAGE=myaitech/myai-de-frontend:local\n";
+      env += "MYAI_DE_FRONTEND_PORT=8083\n";
+    }
+    if (state.frontend_services.includes("myai_knowledger_frontend")) {
+      env += "MYAI_KNOWLEDGER_FRONTEND_IMAGE=myaitech/myai-knowledger-frontend:local\n";
+      env += "MYAI_KNOWLEDGER_FRONTEND_PORT=8084\n";
+    }
+    env += "\n";
   }
   env += "# Install tenancy\n";
   env += "SINGLE_TENANT_MODE=true\n";
@@ -351,36 +375,36 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
 
   const frontendMap: Record<string, { image: string; port: string; containerName: string; apiUrl: string; dependsOn: string }> = {
     myai_core_frontend: {
-      image: "myaitech/myai-core-frontend:local",
-      port: "8080",
+      image: "${CORE_FRONTEND_IMAGE:-myaitech/myai-core-frontend:local}",
+      port: "${CORE_FRONTEND_PORT:-8080}",
       containerName: "myai-core-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
     },
     myai_studio_frontend: {
-      image: "myaitech/myai-studio-frontend:stable",
-      port: "8081",
+      image: "${STUDIO_FRONTEND_IMAGE:-myaitech/myai-studio-frontend:local}",
+      port: "${STUDIO_FRONTEND_PORT:-8081}",
       containerName: "myai-studio-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
     },
     myai_council_frontend: {
-      image: "myaitech/myai-council-frontend:stable",
-      port: "8082",
+      image: "${COUNCIL_FRONTEND_IMAGE:-myaitech/myai-council-frontend:local}",
+      port: "${COUNCIL_FRONTEND_PORT:-8082}",
       containerName: "myai-council-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
     },
     myai_de_frontend: {
-      image: "myaitech/myai-de-frontend:stable",
-      port: "8083",
+      image: "${MYAI_DE_FRONTEND_IMAGE:-myaitech/myai-de-frontend:local}",
+      port: "${MYAI_DE_FRONTEND_PORT:-8083}",
       containerName: "myai-de-frontend",
       apiUrl: "http://localhost:${MYAI_DE_API_PORT:-8010}",
       dependsOn: "myai_de_api",
     },
     myai_knowledger_frontend: {
-      image: "myaitech/myai-knowledger-frontend:stable",
-      port: "8084",
+      image: "${MYAI_KNOWLEDGER_FRONTEND_IMAGE:-myaitech/myai-knowledger-frontend:local}",
+      port: "${MYAI_KNOWLEDGER_FRONTEND_PORT:-8084}",
       containerName: "myai-knowledger-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
@@ -409,13 +433,18 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
     if (serviceId === "myai_core_frontend") compose += "    profiles: [\"core\", \"all\"]\n";
     if (serviceId === "myai_studio_frontend" || serviceId === "myai_council_frontend") compose += "    profiles: [\"suite\", \"all\"]\n";
     if (serviceId === "myai_de_frontend") compose += "    profiles: [\"de\", \"all\"]\n";
-    if (serviceId === "myai_knowledger_frontend") compose += "    profiles: [\"knowledger\", \"all\"]\n";
+    if (serviceId === "myai_knowledger_frontend") compose += "    profiles: [\"knowledger\"]\n";
     compose += "    environment:\n";
     compose += `      MYAI_CORE_API_URL: ${resolvedApiUrl}\n`;
     compose += `      MYAI_CORE_API_BASE_URL: ${resolvedApiUrl}\n`;
     compose += "      MYAI_TENANT_ID: ${INSTALL_TENANT_ID:-tenant-local}\n";
     compose += `      MYAI_APP_ID: ${serviceId}\n`;
-    compose += "      MYAI_DE_API_BASE_URL: http://localhost:${MYAI_DE_API_PORT:-8010}\n";
+    if (serviceId === "myai_de_frontend") {
+      compose += "      MYAI_DE_API_BASE_URL: ${MYAI_DE_API_BASE_URL:-}\n";
+      compose += "      MYAI_DE_API_UPSTREAM: http://myai_de_api:8000\n";
+    } else {
+      compose += "      MYAI_DE_API_BASE_URL: http://localhost:${MYAI_DE_API_PORT:-8010}\n";
+    }
     compose += "    ports:\n";
     compose += `      - \"${frontend.port}:80\"\n`;
     compose += "    depends_on:\n";
@@ -461,9 +490,11 @@ myai-core/
 
 ## Script reference
 - \`bootstrap-local.sh\` / \`bootstrap-local.ps1\`: starts local infrastructure containers using your selected engine (Docker or Podman).
+- \`deploy.sh\` / \`deploy.ps1\`: non-destructive deployment refresh and migration apply (preserves database volumes).
 - \`refresh-images.sh\` / \`refresh-images.ps1\`: pulls latest images and recreates matching services (optionally filtered by CSV image list).
 - \`check-runtime.sh\` / \`check-runtime.ps1\`: checks Core health endpoint and prints runtime-status endpoint guidance.
 - SQL files in \`migrations/\` are auto-applied on first postgres boot (in lexical filename order).
+- If you rebuild \`:local\` images during development, make sure \`CONTAINER_ENGINE\` matches the engine where those images were built (for example \`docker\` on Windows if you built with Docker Desktop).
 
 ## Core runtime options
 - local source mode: build and run Core from this repository backend Dockerfile.
@@ -483,6 +514,14 @@ myai-core/
    - PowerShell: \`.\\check-runtime.ps1\`
 6. Continue to document ingest only after required checks pass.
 
+## Deploy workflow (preserve data)
+- Deploy everything and keep existing Postgres data: \`./deploy.sh all\`
+- Deploy + pull latest images first: \`./deploy.sh all true\`
+- PowerShell equivalents:
+  - \`.\\deploy.ps1 -ProfileSet all\`
+  - \`.\\deploy.ps1 -ProfileSet all -RefreshImages\`
+- This flow does not remove volumes and runs all SQL migrations in \`../migrations\` against the current database.
+
 ## Compose note
 - Generated compose always includes infrastructure dependencies (PostgreSQL/pgvector and optional local model runtime).
 - In local source mode, core_api is built from local repository backend source.
@@ -490,6 +529,7 @@ myai-core/
 - Optional frontend services are included only when selected in the Frontends step.
 - Profile sets: \`core\`, \`suite\`, \`de\`, \`knowledger\`, or \`all\`.
 - \`myai_de_frontend\` uses \`myai_de_api\` when that service is enabled, otherwise it falls back to \`core_api\`.
+- \`all\` currently covers the active Core + Suite + DE stack. Knowledger remains opt-in via the \`knowledger\` profile until that image exists.
 
 ## Session resume
 - Runtime checks and ingest use a bootstrap \`session_id\`.
@@ -622,23 +662,61 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+CONFIG_JSON="$($ENGINE compose --profile "$PROFILE_SET" config --format json)"
+
+is_local_tag() {
+  case "$1" in
+    *:local) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [ -n "$IMAGES_CSV" ]; then
   IFS=',' read -r -a IMAGES <<< "$IMAGES_CSV"
+  MATCHED_SERVICES=""
+
   for image in "\${IMAGES[@]}"; do
     image_trimmed="$(echo "$image" | xargs)"
     [ -z "$image_trimmed" ] && continue
-    echo "Pulling $image_trimmed"
-    $ENGINE pull "$image_trimmed"
+
+    if is_local_tag "$image_trimmed"; then
+      echo "Skipping pull for local tag $image_trimmed"
+    else
+      echo "Pulling $image_trimmed"
+      if ! $ENGINE pull "$image_trimmed"; then
+        echo "Pull failed for $image_trimmed; continuing with recreate."
+      fi
+    fi
+
+    SERVICE_MATCHES="$(printf '%s' "$CONFIG_JSON" | python -c "import json,sys; cfg=json.load(sys.stdin); target=sys.argv[1]; out=[name for name,svc in cfg.get('services',{}).items() if str(svc.get('image','')).strip()==target]; print(' '.join(out))" "$image_trimmed")"
+    if [ -n "$SERVICE_MATCHES" ]; then
+      MATCHED_SERVICES="$MATCHED_SERVICES $SERVICE_MATCHES"
+    fi
   done
 
-  SERVICES="$($ENGINE compose --profile "$PROFILE_SET" config --services)"
-  if [ -n "$SERVICES" ]; then
-    $ENGINE compose --profile "$PROFILE_SET" up -d --no-deps --force-recreate $SERVICES
+  MATCHED_SERVICES="$(echo "$MATCHED_SERVICES" | xargs)"
+  if [ -n "$MATCHED_SERVICES" ]; then
+    echo "Recreating services: $MATCHED_SERVICES"
+    $ENGINE compose --profile "$PROFILE_SET" up -d --no-deps --force-recreate $MATCHED_SERVICES
+  else
+    echo "No services matched requested images for profile $PROFILE_SET"
   fi
 else
-  echo "Pulling all images for profile set: $PROFILE_SET"
-  $ENGINE compose --profile "$PROFILE_SET" pull
-  $ENGINE compose --profile "$PROFILE_SET" up -d --remove-orphans
+  REMOTE_IMAGES="$(printf '%s' "$CONFIG_JSON" | python -c "import json,sys; cfg=json.load(sys.stdin); imgs=sorted({str(svc.get('image','')).strip() for svc in cfg.get('services',{}).values() if str(svc.get('image','')).strip() and not str(svc.get('image','')).strip().endswith(':local')}); print('\\n'.join(imgs))")"
+
+  if [ -n "$REMOTE_IMAGES" ]; then
+    while IFS= read -r image; do
+      [ -z "$image" ] && continue
+      echo "Pulling $image"
+      if ! $ENGINE pull "$image"; then
+        echo "Pull failed for $image; continuing with recreate."
+      fi
+    done <<EOF
+$REMOTE_IMAGES
+EOF
+  fi
+
+  $ENGINE compose --profile "$PROFILE_SET" up -d --force-recreate --remove-orphans
 fi
 `;
 
@@ -655,22 +733,126 @@ if (-not (Test-Path ".env")) {
   Write-Error "Missing .env. Copy .env.template to .env and fill values first."
 }
 
+$configJson = & $engine compose --profile $ProfileSet config --format json
+$config = $configJson | ConvertFrom-Json
+
+function Get-IsLocalTag([string]$image) {
+  return $image -match ':local$'
+}
+
 if ($ImagesCsv) {
   $images = $ImagesCsv.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ }
   foreach ($image in $images) {
-    Write-Host "Pulling $image"
-    & $engine pull $image
+    if (Get-IsLocalTag $image) {
+      Write-Host "Skipping pull for local tag $image"
+    } else {
+      Write-Host "Pulling $image"
+      & $engine pull $image
+      if (-not $?) {
+        Write-Warning "Pull failed for $image; continuing with recreate."
+      }
+    }
   }
 
-  $services = & $engine compose --profile $ProfileSet config --services
-  if ($services) {
-    & $engine compose --profile $ProfileSet up -d --no-deps --force-recreate $services
+  $imageSet = @{}
+  foreach ($image in $images) { $imageSet[$image] = $true }
+
+  $services = @()
+  foreach ($svc in $config.services.PSObject.Properties) {
+    $serviceImage = [string]$svc.Value.image
+    if ($serviceImage -and $imageSet.ContainsKey($serviceImage)) {
+      $services += $svc.Name
+    }
+  }
+
+  if ($services.Count -gt 0) {
+    Write-Host "Recreating services: $($services -join ', ')"
+    & $engine compose --profile $ProfileSet up -d --no-deps --force-recreate @services
+  } else {
+    Write-Warning "No services matched requested images for profile $ProfileSet."
   }
 } else {
-  Write-Host "Pulling all images for profile set: $ProfileSet"
-  & $engine compose --profile $ProfileSet pull
-  & $engine compose --profile $ProfileSet up -d --remove-orphans
+  $remoteImages = @()
+  foreach ($svc in $config.services.PSObject.Properties) {
+    $serviceImage = [string]$svc.Value.image
+    if ($serviceImage -and -not (Get-IsLocalTag $serviceImage)) {
+      $remoteImages += $serviceImage
+    }
+  }
+  $remoteImages = $remoteImages | Select-Object -Unique
+
+  foreach ($image in $remoteImages) {
+    Write-Host "Pulling $image"
+    & $engine pull $image
+    if (-not $?) {
+      Write-Warning "Pull failed for $image; continuing with recreate."
+    }
+  }
+
+  & $engine compose --profile $ProfileSet up -d --force-recreate --remove-orphans
 }
+`;
+
+  const deploySh = `#!/usr/bin/env bash
+set -euo pipefail
+
+ENGINE="\${CONTAINER_ENGINE:-${state.container_engine}}"
+PROFILE_SET="\${1:-all}"
+REFRESH_IMAGES="\${2:-false}"
+
+if [ ! -f .env ]; then
+  echo "Missing .env. Copy env.template to .env and fill values first."
+  exit 1
+fi
+
+if [ "$REFRESH_IMAGES" = "true" ]; then
+  echo "Pulling images for profile set: $PROFILE_SET"
+  if ! $ENGINE compose --profile "$PROFILE_SET" pull; then
+    echo "Pull reported failures. Continuing so local/buildable images can still be deployed."
+  fi
+fi
+
+echo "Deploying services for profile set: $PROFILE_SET"
+$ENGINE compose --profile "$PROFILE_SET" up -d --build --force-recreate --remove-orphans
+
+echo "Applying SQL migrations (data-preserving)..."
+$ENGINE compose exec -T postgres sh -lc 'set -e; for f in /docker-entrypoint-initdb.d/*.sql; do echo "Applying $f"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"; done'
+
+echo "Deployment complete. Containers refreshed, volumes preserved."
+`;
+
+  const deployPs1 = `param(
+  [ValidateSet("core", "suite", "de", "knowledger", "all")]
+  [string]$ProfileSet = "all",
+  [switch]$RefreshImages
+)
+
+$ErrorActionPreference = "Stop"
+$engine = if ($env:CONTAINER_ENGINE) { $env:CONTAINER_ENGINE } else { "${state.container_engine}" }
+
+if (-not (Test-Path ".env")) {
+  Write-Error "Missing .env. Copy env.template to .env and fill values first."
+}
+
+if ($RefreshImages) {
+  Write-Host "Pulling images for profile set: $ProfileSet"
+  & $engine compose --profile $ProfileSet pull
+  if (-not $?) {
+    Write-Warning "Image pull reported failures. Continuing so local/buildable images can still be deployed."
+  }
+}
+
+Write-Host "Deploying services for profile set: $ProfileSet"
+& $engine compose --profile $ProfileSet up -d --build --force-recreate --remove-orphans
+if (-not $?) {
+  throw "Compose deploy failed for profile set: $ProfileSet"
+}
+
+Write-Host "Applying SQL migrations (data-preserving)..."
+$migrationCmd = 'set -e; for f in /docker-entrypoint-initdb.d/*.sql; do echo "Applying $f"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"; done'
+& $engine compose exec -T postgres sh -lc $migrationCmd
+
+Write-Host "Deployment complete. Containers refreshed, volumes preserved."
 `;
 
   const bundleManifest = (files: GeneratedArtifact[]) => {
@@ -737,6 +919,8 @@ if ($ImagesCsv) {
     artifacts.push({ name: "docker-compose.yml", type: "yaml", content: compose });
     artifacts.push({ name: "bootstrap-local.sh", type: "sh", content: bootstrapSh });
     artifacts.push({ name: "bootstrap-local.ps1", type: "ps1", content: bootstrapPs1 });
+    artifacts.push({ name: "deploy.sh", type: "sh", content: deploySh });
+    artifacts.push({ name: "deploy.ps1", type: "ps1", content: deployPs1 });
     artifacts.push({ name: "refresh-images.sh", type: "sh", content: refreshImagesSh });
     artifacts.push({ name: "refresh-images.ps1", type: "ps1", content: refreshImagesPs1 });
     artifacts.push({ name: "check-runtime.sh", type: "sh", content: checkRuntimeSh });

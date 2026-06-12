@@ -37,6 +37,23 @@ def resolve_chat_action(
                 reason="persona_mention_route",
             )
 
+    if room_persona_count >= 2:
+        roll_call_hints = (
+            "role call",
+            "roll call",
+            "who is participating",
+            "who is in this chat",
+            "check in all personas",
+            "all personas check in",
+        )
+        if any(hint in lowered for hint in roll_call_hints):
+            return ChatActionDecision(
+                action_type="attendance",
+                resolved_mode="threaded",
+                resolved_persona_id=None,
+                reason="persona_roll_call",
+            )
+
     if lowered.startswith("/focus") or lowered.startswith("/flow"):
         if room_persona_count >= 2:
             return ChatActionDecision(

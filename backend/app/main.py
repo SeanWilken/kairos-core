@@ -18,7 +18,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Kairos Core Backend",
+    title="MyAI Core Backend",
     version="0.1.0",
     docs_url="/docs",
     openapi_url="/openapi.json",

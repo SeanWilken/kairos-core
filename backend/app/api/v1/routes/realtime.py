@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import asyncio
 from typing import Any
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.audit_store import audit_store
 from app.core.chat_action_router import resolve_chat_action
+from app.core.chat_contracts import normalize_chat_controls
 from app.core.collaboration_store import collaboration_store
 from app.core.engagement_gate import evaluate_ai_engagement
 from app.core.fallback_store import fallback_store
@@ -15,9 +17,12 @@ from app.core.context_window_service import context_window_service
 from app.core.orchestration_policy import COUNCIL_MODES, resolve_orchestration_mode
 from app.core.orchestration_store import orchestration_store
 from app.core.persona_prompt import compile_persona_system_prompt_resolved
+from app.core.prompt_template_runtime import resolve_rendered_prompt_template
 from app.core.realtime_manager import realtime_manager
 from app.core.security import decode_jwt
 from app.core.studio_store import studio_store
+from app.core.tool_execution_store import tool_execution_store
+from app.core.tool_runtime import generate_image_tool
 from app.core.tenant_policy import require_existing_tenant, validate_tenant_scope
 from app.core.tool_provider_registry import is_provider_configured
 
@@ -42,6 +47,61 @@ async def _emit_room_event(
 ) -> None:
     room = f"tenant:{tenant_id}:channel:{channel_id}"
     await realtime_manager.publish(room=room, event=event)
+
+
+async def _emit_response_blocks(
+    *,
+    tenant_id: str,
+    channel_id: str,
+    message: dict[str, Any],
+    run_id: str | None = None,
+) -> None:
+    metadata = message.get("metadata", {}) if isinstance(message.get("metadata"), dict) else {}
+    structured = metadata.get("structured_content", {}) if isinstance(metadata.get("structured_content"), dict) else {}
+    blocks = structured.get("blocks", []) if isinstance(structured.get("blocks"), list) else []
+    message_id = str(message.get("message_id", "")).strip()
+    if not message_id or not blocks:
+        return
+
+    await _emit_room_event(
+        tenant_id=tenant_id,
+        channel_id=channel_id,
+        run_id=run_id,
+        event={
+            "event": "chat.response.started",
+            "channel_id": channel_id,
+            "run_id": run_id,
+            "response_id": message_id,
+            "message_id": message_id,
+            "block_count": len(blocks),
+            "primary_type": structured.get("primary_type", "text"),
+            "render_hint": structured.get("render_hint", "plain_text"),
+            "response_type": metadata.get("response_type", structured.get("response_type", "conversation")),
+            "orchestration": metadata.get("orchestration", "single_best"),
+        },
+    )
+
+    for index, block in enumerate(blocks):
+        block_payload = dict(block) if isinstance(block, dict) else {"type": "text", "text": str(block)}
+        block_type = str(block_payload.get("type", "text")).strip().lower()
+        block_id = str(block_payload.get("block_id", f"block:{index}")).strip() or f"block:{index}"
+        block_payload["block_id"] = block_id
+        await _emit_room_event(
+            tenant_id=tenant_id,
+            channel_id=channel_id,
+            run_id=run_id,
+            event={
+                "event": "chat.response.block",
+                "channel_id": channel_id,
+                "run_id": run_id,
+                "response_id": message_id,
+                "message_id": message_id,
+                "sequence": index,
+                "block_type": block_type,
+                "orchestration": metadata.get("orchestration", "single_best"),
+                "block": block_payload,
+            },
+        )
 
 
 def _is_persona_allowed_for_org(
@@ -79,6 +139,238 @@ def _persona_runtime_model_settings(persona: dict[str, Any]) -> tuple[str | None
     provider_id = str(runtime.get("provider_id", "")).strip().lower() or None
     model_id = str(runtime.get("model_id", "")).strip() or None
     return provider_id, model_id
+
+
+def _persona_provider_id(persona: dict[str, Any]) -> str:
+    provider_id, _ = _persona_runtime_model_settings(persona)
+    return provider_id or "openai"
+
+
+def _append_prompt(base: str, extension: str) -> str:
+    left = str(base or "").strip()
+    right = str(extension or "").strip()
+    if not right:
+        return left
+    if not left:
+        return right
+    return f"{left}\n\n{right}"
+
+
+def _workflow_template_kind(message_content: str) -> str:
+    lowered = str(message_content or "").strip().lower()
+    if lowered.startswith("/focus"):
+        return "focus_group_prompt"
+    if lowered.startswith("/flow") or lowered.startswith("/agent"):
+        return "tasking_prompt"
+    return "planner_prompt"
+
+
+def _persona_access_level(persona: dict[str, Any]) -> str:
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    access = data.get("access_policy", {}) if isinstance(data.get("access_policy"), dict) else {}
+    level = str(access.get("visibility", "organization")).strip().lower()
+    return level or "organization"
+
+
+def _can_access_persona_for_roles(*, roles: list[str], is_global_admin: bool, persona: dict[str, Any]) -> bool:
+    level = _persona_access_level(persona)
+    if level in {"admin_only", "restricted_admin"}:
+        return bool(is_global_admin or any(role in {"owner", "admin", "global_admin"} for role in roles))
+    return True
+
+
+def _response_type_instruction(response_type: str) -> str:
+    kind = str(response_type or "conversation").strip().lower()
+    if kind == "markdown":
+        return "Return well-structured markdown with headings, short lists, and code fences when useful."
+    if kind == "summary":
+        return "Return a concise executive summary with key decisions, risks, and next actions."
+    if kind == "reporting":
+        return (
+            "Return a reporting-oriented response with sections for findings, metrics, assumptions, "
+            "and tabular data where possible."
+        )
+    return "Return a natural conversational response."
+
+
+def _parse_image_command(content: str) -> str:
+    text = str(content or "").strip()
+    if not text.lower().startswith("/image"):
+        return ""
+    parts = text.split(" ", 1)
+    if len(parts) < 2:
+        return ""
+    return parts[1].strip()
+
+
+def _infer_image_prompt(content: str) -> str:
+    text = str(content or "").strip()
+    lowered = text.lower()
+    if lowered.startswith("/image"):
+        return _parse_image_command(text)
+    triggers = ["create an image", "generate an image", "hero image", "mockup", "visual concept"]
+    if any(token in lowered for token in triggers):
+        return text
+    return ""
+
+
+def _build_structured_content(
+    *,
+    text: str,
+    response_type: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    kind = str(response_type or "conversation").strip().lower()
+    blocks = _segment_structured_blocks(text=text, response_type=kind)
+    block_types = [str(block.get("type", "")).strip().lower() for block in blocks if isinstance(block, dict)]
+    unique_non_image_types = [item for item in block_types if item and item != "image"]
+    unique_non_image_types = list(dict.fromkeys(unique_non_image_types))
+    if not unique_non_image_types:
+        primary_type = "markdown" if kind in {"markdown", "summary", "reporting"} else "text"
+    elif len(unique_non_image_types) == 1:
+        primary_type = unique_non_image_types[0]
+    else:
+        primary_type = "mixed"
+    for item in attachments or []:
+        if str(item.get("type", "")).strip().lower() != "image":
+            continue
+        blocks.append(
+            {
+                "type": "image",
+                "url": str(item.get("asset_url", "")),
+                "alt": "Generated image",
+                "caption": str(item.get("status", "")),
+                "mime_type": str(item.get("mime_type", "image/png")),
+                "image_base64": str(item.get("image_base64", "")),
+            }
+        )
+    return {
+        "version": "v1",
+        "primary_type": primary_type,
+        "response_type": kind,
+        "render_hint": (
+            "markdown"
+            if primary_type == "markdown"
+            else "structured_blocks" if primary_type == "mixed" else "plain_text"
+        ),
+        "blocks": blocks,
+    }
+
+
+def _build_content_block(*, kind: str, body: str, index: int) -> dict[str, Any]:
+    block_id = f"block:{index}"
+    capabilities = {
+        "replyable": True,
+        "editable": kind == "markdown",
+        "saveable": kind in {"markdown", "text", "code"},
+        "copyable": True,
+    }
+    if kind == "markdown":
+        return {
+            "block_id": block_id,
+            "type": "markdown",
+            "markdown": body,
+            "capabilities": capabilities,
+        }
+    return {
+        "block_id": block_id,
+        "type": "text",
+        "text": body,
+        "capabilities": capabilities,
+    }
+
+
+def _split_mixed_blocks(text: str) -> list[dict[str, Any]]:
+    content = str(text or "").replace("\r\n", "\n")
+    if not content.strip():
+        return [{"type": "text", "text": ""}]
+
+    lines = content.split("\n")
+    segments: list[tuple[str, str]] = []
+    current_lines: list[str] = []
+    current_kind: str | None = None
+    in_code_block = False
+
+    def flush() -> None:
+        nonlocal current_lines, current_kind
+        if not current_lines:
+            current_kind = None
+            return
+        body = "\n".join(current_lines).strip("\n")
+        if body:
+            segments.append((current_kind or "text", body))
+        current_lines = []
+        current_kind = None
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if not in_code_block:
+                flush()
+                in_code_block = True
+                current_kind = "markdown"
+                current_lines = [line]
+            else:
+                current_lines.append(line)
+                flush()
+                in_code_block = False
+            continue
+        if in_code_block:
+            current_lines.append(line)
+            continue
+        if not stripped:
+            flush()
+            continue
+        line_kind = "markdown" if _looks_like_markdown_line(stripped) else "text"
+        if current_kind is None:
+            current_kind = line_kind
+            current_lines = [line]
+            continue
+        if line_kind != current_kind:
+            flush()
+            current_kind = line_kind
+            current_lines = [line]
+            continue
+        current_lines.append(line)
+
+    flush()
+
+    if not segments:
+        return [{"type": "text", "text": content}]
+
+    blocks: list[dict[str, Any]] = []
+    for index, (kind, body) in enumerate(segments):
+        blocks.append(_build_content_block(kind=kind, body=body, index=index))
+    return blocks
+
+
+def _segment_structured_blocks(*, text: str, response_type: str) -> list[dict[str, Any]]:
+    content = str(text or "").replace("\r\n", "\n")
+    if not content.strip():
+        return [{"type": "text", "text": ""}]
+    blocks = _split_mixed_blocks(content)
+    kind = str(response_type or "").strip().lower()
+    if kind in {"markdown", "summary", "reporting"}:
+        non_image_blocks = [block for block in blocks if str(block.get("type", "")).strip().lower() != "image"]
+        if non_image_blocks and all(str(block.get("type", "")).strip().lower() == "text" for block in non_image_blocks):
+            return [_build_content_block(kind="markdown", body=content, index=0)]
+    return blocks
+
+
+def _looks_like_markdown_line(line: str) -> bool:
+    if re.match(r"^#{1,6}\s", line):
+        return True
+    if re.match(r"^[-*+]\s", line):
+        return True
+    if re.match(r"^\d+\.\s", line):
+        return True
+    if re.match(r"^>\s", line):
+        return True
+    if re.match(r"^[-*_]{3,}$", line):
+        return True
+    if line.startswith("|") and line.endswith("|"):
+        return True
+    return False
 
 
 def _persona_fallback_policy(persona: dict[str, Any] | None) -> dict[str, Any]:
@@ -124,6 +416,11 @@ async def _generate_persona_completion(
     channel_id: str,
     run_id: str,
     persona: dict[str, Any],
+    action_type: str = "general",
+    message_content: str = "",
+    response_type: str = "conversation",
+    planning_notes: str = "",
+    participant_control: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     messages = collaboration_store.build_conversation_messages(
         tenant_id=tenant_id,
@@ -134,6 +431,14 @@ async def _generate_persona_completion(
     org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
     compaction_level = str(org_settings.get("context_compaction_level", "medium"))
     provider_override, model_override = _persona_runtime_model_settings(persona)
+    control = participant_control if isinstance(participant_control, dict) else {}
+    override_provider = str(control.get("runtime_provider_id", "")).strip().lower()
+    override_model = str(control.get("runtime_model_id", "")).strip()
+    if override_provider and is_provider_configured(override_provider):
+        provider_override = override_provider
+    if override_model:
+        model_override = override_model
+    effective_response_type = str(control.get("response_type", "")).strip().lower() or response_type
     persona_data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
     persona_runtime = persona_data.get("runtime", {}) if isinstance(persona_data.get("runtime"), dict) else {}
     compaction_disabled = bool(persona_runtime.get("disable_compaction", False))
@@ -143,13 +448,39 @@ async def _generate_persona_completion(
         disabled=compaction_disabled,
     )
     try:
+        base_system_prompt = compile_persona_system_prompt_resolved(
+            tenant_id=tenant_id,
+            persona=persona,
+            org_id=org_id,
+        )
+        provider_id = _persona_provider_id(persona)
+        template_kind = "tool_call_prompt"
+        if action_type == "workflow":
+            template_kind = _workflow_template_kind(message_content)
+        prompt_extension = resolve_rendered_prompt_template(
+            tenant_id=tenant_id,
+            provider_id=provider_id,
+            template_kind=template_kind,
+            scopes={"team": "", "division": "", "org": org_id, "tenant": tenant_id},
+            context={
+                "persona": {
+                    "name": persona.get("name", ""),
+                    "role": persona.get("role", ""),
+                    "scope": persona.get("scope", "organization"),
+                },
+                "request": {"message": message_content, "action_type": action_type},
+            },
+        )
+        if planning_notes.strip():
+            prompt_extension = _append_prompt(
+                prompt_extension,
+                "Planner notes for this turn: " + planning_notes.strip(),
+            )
+        effective_system_prompt = _append_prompt(base_system_prompt, prompt_extension)
+        effective_system_prompt = _append_prompt(effective_system_prompt, _response_type_instruction(effective_response_type))
         result = await model_gateway.generate_text(
             ModelRequest(
-                system_prompt=compile_persona_system_prompt_resolved(
-                    tenant_id=tenant_id,
-                    persona=persona,
-                    org_id=org_id,
-                ),
+                system_prompt=effective_system_prompt,
                 conversation_messages=context_result.messages,
                 model_profile=str(persona.get("model_profile", "reasoning-optimized")),
                 provider_id=provider_override,
@@ -179,11 +510,7 @@ async def _generate_persona_completion(
             if consumed_approval is not None:
                 result = await model_gateway.generate_text(
                     ModelRequest(
-                        system_prompt=compile_persona_system_prompt_resolved(
-                            tenant_id=tenant_id,
-                            persona=persona,
-                            org_id=org_id,
-                        ),
+                        system_prompt=effective_system_prompt,
                         conversation_messages=context_result.messages,
                         model_profile=str(persona.get("model_profile", "reasoning-optimized")),
                         provider_id=fallback_provider_id,
@@ -229,6 +556,11 @@ async def _generate_persona_completion(
         "provider": result.provider,
         "model": result.model,
         "usage": result.usage,
+        "applied_controls": {
+            "response_type": effective_response_type,
+            "runtime_provider_id": provider_override or "",
+            "runtime_model_id": model_override or "",
+        },
         "context_window": {
             "raw_token_estimate": context_result.raw_token_estimate,
             "compacted_token_estimate": context_result.compacted_token_estimate,
@@ -248,6 +580,7 @@ async def _run_single_best_ai(
     run_id: str,
     persona_id: str | None,
     delay_seconds: int,
+    response_type: str = "conversation",
 ) -> None:
     await _emit_room_event(
         tenant_id=tenant_id,
@@ -322,6 +655,8 @@ async def _run_single_best_ai(
         level=compaction_level,
         disabled=compaction_disabled,
     )
+
+    system_prompt = _append_prompt(system_prompt, _response_type_instruction(response_type))
 
     try:
         result = await asyncio.wait_for(
@@ -445,7 +780,15 @@ async def _run_single_best_ai(
                 "compaction_level": compaction_level,
                 "compaction_disabled": compaction_disabled,
             },
+            "structured_content": _build_structured_content(text=result.content, response_type=response_type),
         },
+    )
+
+    await _emit_response_blocks(
+        tenant_id=tenant_id,
+        channel_id=channel_id,
+        run_id=run_id,
+        message=assistant_message,
     )
 
     await _emit_room_event(
@@ -477,6 +820,11 @@ async def _run_council_ai(
     run_id: str,
     requested_mode: str,
     delay_ms: int,
+    action_type: str = "general",
+    message_content: str = "",
+    response_type: str = "conversation",
+    participant_controls: dict[str, dict[str, Any]] | None = None,
+    explicit_persona_calls: list[str] | None = None,
 ) -> None:
     await _emit_room_event(
         tenant_id=tenant_id,
@@ -527,6 +875,11 @@ async def _run_council_ai(
             continue
         personas.append(persona)
 
+    calls = [str(item).strip() for item in (explicit_persona_calls or []) if str(item).strip()]
+    if calls:
+        allowed_ids = set(calls)
+        personas = [item for item in personas if str(item.get("persona_id", "")) in allowed_ids]
+
     settings = studio_store.get_org_settings(tenant_id=tenant_id, org_id=org_id)
     org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
     max_personas = int(org_settings.get("orchestration_max_personas", 4) or 4)
@@ -548,6 +901,34 @@ async def _run_council_ai(
         orchestration_store.fail_run(run_id=run_id, reason="no_approved_personas")
         return
 
+    controls = participant_controls if isinstance(participant_controls, dict) else {}
+    applied_control_map: dict[str, dict[str, Any]] = {}
+    for persona in personas:
+        persona_id = str(persona.get("persona_id", "")).strip()
+        if not persona_id:
+            continue
+        control = controls.get(persona_id, {}) if isinstance(controls.get(persona_id, {}), dict) else {}
+        applied_control_map[persona_id] = {
+            "response_type": str(control.get("response_type", "")).strip().lower() or response_type,
+            "runtime_provider_id": str(control.get("runtime_provider_id", "")).strip().lower(),
+            "runtime_model_id": str(control.get("runtime_model_id", "")).strip(),
+        }
+
+    await _emit_room_event(
+        tenant_id=tenant_id,
+        channel_id=channel_id,
+        run_id=run_id,
+        event={
+            "event": "orchestration.controls.applied",
+            "channel_id": channel_id,
+            "run_id": run_id,
+            "chat_type": "group",
+            "explicit_persona_calls": calls,
+            "global_response_type": response_type,
+            "participant_controls": applied_control_map,
+        },
+    )
+
     council_mode = requested_mode
     if requested_mode == "council":
         council_mode = str(config.get("council_mode", "summarized"))
@@ -557,6 +938,67 @@ async def _run_council_ai(
     allow_parallel = bool(config.get("allow_parallel_responses", False))
     if not bool(org_settings.get("orchestration_parallel_enabled", False)):
         allow_parallel = False
+
+    planning_notes = ""
+    if action_type == "workflow":
+        planner_persona = personas[0]
+        planner_messages = [
+            {
+                "role": "user",
+                "content": (
+                    "Create a concise execution plan for collaborating personas. "
+                    "Include goals, role assignments, and expected deliverable format.\n\n"
+                    f"User request: {message_content}"
+                ),
+            }
+        ]
+        planner_prompt = resolve_rendered_prompt_template(
+            tenant_id=tenant_id,
+            provider_id=_persona_provider_id(planner_persona),
+            template_kind="planner_prompt",
+            scopes={"team": str(channel.get("team_id", "") or ""), "division": "", "org": org_id, "tenant": tenant_id},
+            context={
+                "persona": {
+                    "name": planner_persona.get("name", ""),
+                    "role": planner_persona.get("role", ""),
+                    "scope": planner_persona.get("scope", "organization"),
+                },
+                "request": {"message": message_content, "action_type": action_type},
+            },
+        )
+        try:
+            planner_result = await model_gateway.generate_text(
+                ModelRequest(
+                    system_prompt=_append_prompt(
+                        compile_persona_system_prompt_resolved(
+                            tenant_id=tenant_id,
+                            persona=planner_persona,
+                            org_id=org_id,
+                            team_id=str(channel.get("team_id", "") or ""),
+                        ),
+                        planner_prompt,
+                    ),
+                    conversation_messages=planner_messages,
+                    model_profile=str(planner_persona.get("model_profile", "reasoning-optimized")),
+                    tenant_id=tenant_id,
+                    org_id=org_id,
+                )
+            )
+            planning_notes = str(planner_result.content or "").strip()
+            await _emit_room_event(
+                tenant_id=tenant_id,
+                channel_id=channel_id,
+                run_id=run_id,
+                event={
+                    "event": "orchestration.plan.generated",
+                    "channel_id": channel_id,
+                    "run_id": run_id,
+                    "planner_persona_id": planner_persona.get("persona_id"),
+                    "plan": planning_notes,
+                },
+            )
+        except Exception:
+            planning_notes = ""
 
     try:
         if allow_parallel:
@@ -570,6 +1012,11 @@ async def _run_council_ai(
                             channel_id=channel_id,
                             run_id=run_id,
                             persona=persona,
+                            action_type=action_type,
+                            message_content=message_content,
+                            response_type=response_type,
+                            planning_notes=planning_notes,
+                            participant_control=controls.get(str(persona.get("persona_id", "")), {}),
                         )
                         for persona in personas
                     ]
@@ -587,6 +1034,11 @@ async def _run_council_ai(
                             channel_id=channel_id,
                             run_id=run_id,
                             persona=persona,
+                            action_type=action_type,
+                            message_content=message_content,
+                            response_type=response_type,
+                            planning_notes=planning_notes,
+                            participant_control=controls.get(str(persona.get("persona_id", "")), {}),
                         )
                 )
     except Exception as error:
@@ -626,7 +1078,14 @@ async def _run_council_ai(
                     "persona_name": response["persona_name"],
                     "mode": council_mode,
                     "orchestration": "council",
+                    "structured_content": _build_structured_content(text=response["content"], response_type=response_type),
                 },
+            )
+            await _emit_response_blocks(
+                tenant_id=tenant_id,
+                channel_id=channel_id,
+                run_id=run_id,
+                message=message,
             )
             await _emit_room_event(
                 tenant_id=tenant_id,
@@ -659,7 +1118,14 @@ async def _run_council_ai(
                 "mode": "summarized",
                 "orchestration": "council",
                 "optimization": "single_persona_skip_finalize",
+                "structured_content": _build_structured_content(text=response["content"], response_type=response_type),
             },
+        )
+        await _emit_response_blocks(
+            tenant_id=tenant_id,
+            channel_id=channel_id,
+            run_id=run_id,
+            message=summary_message,
         )
         await _emit_room_event(
             tenant_id=tenant_id,
@@ -702,16 +1168,43 @@ async def _run_council_ai(
         }
     ]
 
+    council_head_provider = _persona_provider_id(council_head)
+    planner_extension = resolve_rendered_prompt_template(
+        tenant_id=tenant_id,
+        provider_id=council_head_provider,
+        template_kind=("planner_prompt" if action_type == "workflow" else "system_prompt"),
+        scopes={
+            "team": str(channel.get("team_id", "") or ""),
+            "division": "",
+            "org": org_id,
+            "tenant": tenant_id,
+        },
+        context={
+            "persona": {
+                "name": council_head.get("name", ""),
+                "role": council_head.get("role", ""),
+                "scope": council_head.get("scope", "organization"),
+            },
+            "request": {"message": message_content, "action_type": action_type},
+            "council": {"response_count": len(responses)},
+        },
+    )
+
+    summary_system_prompt = compile_persona_system_prompt_resolved(
+        tenant_id=tenant_id,
+        persona=council_head,
+        org_id=org_id,
+        team_id=str(channel.get("team_id", "") or ""),
+    )
+    if planner_extension:
+        summary_system_prompt = _append_prompt(summary_system_prompt, planner_extension)
+    summary_system_prompt = _append_prompt(summary_system_prompt, _response_type_instruction(response_type))
+
     try:
         summary_result = await asyncio.wait_for(
             model_gateway.generate_text(
                 ModelRequest(
-                    system_prompt=compile_persona_system_prompt_resolved(
-                        tenant_id=tenant_id,
-                        persona=council_head,
-                        org_id=org_id,
-                        team_id=str(channel.get("team_id", "") or ""),
-                    ),
+                    system_prompt=summary_system_prompt,
                     conversation_messages=summary_messages,
                     model_profile=str(council_head.get("model_profile", "reasoning-optimized")),
                     tenant_id=tenant_id,
@@ -750,7 +1243,14 @@ async def _run_council_ai(
             "mode": "summarized",
             "orchestration": "council",
             "council_responses": responses,
+            "structured_content": _build_structured_content(text=summary_result.content, response_type=response_type),
         },
+    )
+    await _emit_response_blocks(
+        tenant_id=tenant_id,
+        channel_id=channel_id,
+        run_id=run_id,
+        message=summary_message,
     )
     await _emit_room_event(
         tenant_id=tenant_id,
@@ -802,6 +1302,9 @@ async def realtime_ws(websocket: WebSocket) -> None:
     realtime_manager.subscribe(room=user_room, websocket=websocket)
 
     org_id_claim = claims.get("org_id")
+    roles_claim = claims.get("roles")
+    roles = [str(item) for item in roles_claim] if isinstance(roles_claim, list) else []
+    is_global_admin = bool(claims.get("is_global_admin", False))
     if isinstance(org_id_claim, str) and org_id_claim:
         realtime_manager.subscribe(room=f"tenant:{tenant_id}:org:{org_id_claim}", websocket=websocket)
 
@@ -855,10 +1358,40 @@ async def realtime_ws(websocket: WebSocket) -> None:
                     continue
 
                 if action == "chat.send":
+                    normalized_controls = normalize_chat_controls(payload if isinstance(payload, dict) else {})
+                    if not bool(normalized_controls.get("accepted", False)):
+                        await websocket.send_json(
+                            {
+                                "event": "system.error",
+                                "message": "chat_payload_validation_failed",
+                                "details": {
+                                    "reason_code": "CHAT_PAYLOAD_VALIDATION_FAILED",
+                                    "rejections": normalized_controls.get("rejections", []),
+                                    "warnings": normalized_controls.get("warnings", []),
+                                },
+                            }
+                        )
+                        continue
+                    normalized = (
+                        normalized_controls.get("normalized", {})
+                        if isinstance(normalized_controls.get("normalized"), dict)
+                        else {}
+                    )
                     channel_id = payload.get("channel_id")
-                    content = payload.get("content")
-                    persona_id = payload.get("persona_id")
-                    mode = payload.get("mode", "single_best")
+                    content = normalized.get("content", payload.get("content"))
+                    persona_id = normalized.get("persona_id")
+                    mode = normalized.get("mode", payload.get("mode", "single_best"))
+                    response_type = str(normalized.get("response_type", payload.get("response_type", "conversation")))
+                    participant_controls = (
+                        normalized.get("participant_controls", {})
+                        if isinstance(normalized.get("participant_controls", {}), dict)
+                        else {}
+                    )
+                    explicit_persona_calls = (
+                        normalized.get("explicit_persona_calls", [])
+                        if isinstance(normalized.get("explicit_persona_calls", []), list)
+                        else []
+                    )
 
                     if not isinstance(channel_id, str) or not isinstance(content, str) or not content.strip():
                         await websocket.send_json(
@@ -902,6 +1435,18 @@ async def realtime_ws(websocket: WebSocket) -> None:
                                 }
                             )
                             continue
+                        if not _can_access_persona_for_roles(
+                            roles=roles,
+                            is_global_admin=is_global_admin,
+                            persona=selected_persona,
+                        ):
+                            await websocket.send_json(
+                                {
+                                    "event": "system.error",
+                                    "message": "persona access denied",
+                                }
+                            )
+                            continue
 
                     room = f"tenant:{tenant_id}:channel:{channel_id}"
                     realtime_manager.subscribe(room=room, websocket=websocket)
@@ -911,7 +1456,15 @@ async def realtime_ws(websocket: WebSocket) -> None:
                         channel_id=channel_id,
                         sender_user_id=user_id,
                         content=content.strip(),
-                        metadata={"sender_kind": "user"},
+                        metadata={
+                            "sender_kind": "user",
+                            "structured_content": {
+                                "version": "v1",
+                                "blocks": normalized.get("content_blocks", []),
+                            }
+                            if normalized.get("content_blocks")
+                            else {"version": "v1", "blocks": [{"type": "text", "text": content.strip()}]},
+                        },
                     )
 
                     await realtime_manager.publish(
@@ -927,7 +1480,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
                     tenant_id=tenant_id,
                     room_id=channel_id,
                 )
-                ai_handles = ["kairos", "administrator"]
+                ai_handles = ["myai", "administrator"]
                 handle_to_persona_id: dict[str, str] = {}
                 for room_persona in room_personas:
                     persona_id_value = str(room_persona.get("persona_id", "")).strip()
@@ -986,6 +1539,114 @@ async def realtime_ws(websocket: WebSocket) -> None:
                             "event": "ai.engagement.skipped",
                             "channel_id": channel_id,
                             "reason": decision.reason,
+                        },
+                        )
+                    continue
+
+                image_prompt = _infer_image_prompt(content)
+                if image_prompt:
+                    provider_id = "google"
+                    model_id = "imagen-3.0-generate-002"
+                    if isinstance(persona_id, str) and persona_id.strip():
+                        selected_persona = collaboration_store.get_persona(
+                            tenant_id=tenant_id,
+                            persona_id=persona_id,
+                        )
+                        if isinstance(selected_persona, dict):
+                            if not _can_access_persona_for_roles(
+                                roles=roles,
+                                is_global_admin=is_global_admin,
+                                persona=selected_persona,
+                            ):
+                                await websocket.send_json(
+                                    {
+                                        "event": "system.error",
+                                        "message": "persona access denied",
+                                    }
+                                )
+                                continue
+                            runtime_provider, runtime_model = _persona_runtime_model_settings(selected_persona)
+                            if runtime_provider in {"google", "openai"}:
+                                provider_id = runtime_provider
+                            if runtime_model:
+                                model_id = runtime_model
+
+                    auto_execute = bool(normalized.get("auto_execute_tools", True))
+                    if auto_execute:
+                        tool_output = generate_image_tool(
+                            prompt=image_prompt,
+                            provider_id=provider_id,
+                            model_id=model_id,
+                        )
+                        execution = tool_execution_store.create_execution(
+                            tenant_id=tenant_id,
+                            org_id=org_id,
+                            tool_id="nano_banana",
+                            provider_id=str(tool_output.get("provider_id", provider_id)),
+                            model_id=str(tool_output.get("model_id", model_id)),
+                            input_payload={"prompt": image_prompt},
+                            output_payload=tool_output,
+                            created_by_user_id=user_id,
+                            status=str(tool_output.get("status", "completed")),
+                        )
+                    else:
+                        tool_output = {
+                            "provider_id": provider_id,
+                            "model_id": model_id,
+                            "mime_type": "image/png",
+                            "status": "recommended",
+                            "note": "Tool call was recommended but not executed.",
+                        }
+                        execution = {"execution_id": "", "provider_id": provider_id, "model_id": model_id}
+                    assistant_message = collaboration_store.create_channel_message(
+                        tenant_id=tenant_id,
+                        channel_id=channel_id,
+                        sender_user_id=user_id,
+                        content=("Generated image from prompt." if auto_execute else "Image recommendation prepared."),
+                        metadata={
+                            "sender_kind": "assistant",
+                            "mode": "single_best",
+                            "tool_call": {
+                                "tool_id": "nano_banana",
+                                "execution_id": execution.get("execution_id"),
+                                "provider": execution.get("provider_id"),
+                                "model": execution.get("model_id"),
+                            },
+                            "attachments": [
+                                {
+                                    "type": "image",
+                                    "mime_type": str(tool_output.get("mime_type", "image/png")),
+                                    "asset_url": str(tool_output.get("asset_url", "")),
+                                    "image_base64": str(tool_output.get("image_base64", "")),
+                                    "status": str(tool_output.get("status", "")),
+                                }
+                            ],
+                            "structured_content": _build_structured_content(
+                                text=("Generated image from prompt." if auto_execute else "Image recommendation prepared."),
+                                response_type=response_type,
+                                attachments=[
+                                    {
+                                        "type": "image",
+                                        "mime_type": str(tool_output.get("mime_type", "image/png")),
+                                        "asset_url": str(tool_output.get("asset_url", "")),
+                                        "image_base64": str(tool_output.get("image_base64", "")),
+                                        "status": str(tool_output.get("status", "")),
+                                    }
+                                ],
+                            ),
+                        },
+                    )
+                    await _emit_response_blocks(
+                        tenant_id=tenant_id,
+                        channel_id=channel_id,
+                        message=assistant_message,
+                    )
+                    await realtime_manager.publish(
+                        room=room,
+                        event={
+                            "event": "chat.response.completed",
+                            "channel_id": channel_id,
+                            "message": assistant_message,
                         },
                     )
                     continue
@@ -1126,6 +1787,11 @@ async def realtime_ws(websocket: WebSocket) -> None:
                             run_id=run_id,
                             requested_mode=str(mode),
                             delay_ms=delay_ms,
+                            action_type=action_decision.action_type,
+                            message_content=content,
+                            response_type=response_type,
+                            participant_controls=participant_controls,
+                            explicit_persona_calls=explicit_persona_calls,
                         )
                     )
                 else:
@@ -1137,6 +1803,7 @@ async def realtime_ws(websocket: WebSocket) -> None:
                             run_id=run_id,
                             persona_id=persona_id if isinstance(persona_id, str) else None,
                             delay_seconds=int(channel.get("responder_delay_seconds", 12)),
+                            response_type=response_type,
                         )
                     )
                     _pending_ai_tasks[channel_id] = task

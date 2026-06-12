@@ -6,7 +6,7 @@ from tests.contracts.v1._auth_helpers import register_and_login
 
 def test_studio_governance_baseline_and_settings_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="gov.owner@kairos.dev")
+    headers = register_and_login(client, email="gov.owner@myai.dev")
 
     org_response = client.post(
         "/v1/studio/organizations",
@@ -39,7 +39,7 @@ def test_studio_governance_baseline_and_settings_contract() -> None:
 
 def test_studio_invite_accept_contract() -> None:
     client = TestClient(app)
-    owner_headers = register_and_login(client, email="invite.owner@kairos.dev")
+    owner_headers = register_and_login(client, email="invite.owner@myai.dev")
 
     org_response = client.post(
         "/v1/studio/organizations",
@@ -49,7 +49,7 @@ def test_studio_invite_accept_contract() -> None:
     assert org_response.status_code == 200
     org_id = org_response.json()["data"]["org_id"]
 
-    invited_email = "invite.member@kairos.dev"
+    invited_email = "invite.member@myai.dev"
     invite_response = client.post(
         "/v1/studio/invites",
         headers=owner_headers,
@@ -57,6 +57,14 @@ def test_studio_invite_accept_contract() -> None:
     )
     assert invite_response.status_code == 200
     invite_id = invite_response.json()["data"]["invite_id"]
+
+    email_messages = client.get(
+        "/v1/tools/email/messages",
+        headers=owner_headers,
+        params={"org_id": org_id},
+    )
+    assert email_messages.status_code == 200
+    assert any(item["subject"].startswith("Invitation to join") for item in email_messages.json()["data"]["items"])
 
     invitee_headers = register_and_login(client, email=invited_email)
     accept_response = client.post(
@@ -74,7 +82,7 @@ def test_studio_invite_accept_contract() -> None:
 
 def test_studio_onboarding_complete_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="onboarding.owner@kairos.dev")
+    headers = register_and_login(client, email="onboarding.owner@myai.dev")
 
     org_response = client.post(
         "/v1/studio/organizations",
@@ -109,7 +117,7 @@ def test_studio_onboarding_complete_contract() -> None:
 
 def test_studio_governance_baseline_not_found_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="gov.notfound@kairos.dev")
+    headers = register_and_login(client, email="gov.notfound@myai.dev")
 
     response = client.get("/v1/studio/governance/baseline?org_id=missing-org", headers=headers)
 
@@ -120,12 +128,12 @@ def test_studio_governance_baseline_not_found_contract() -> None:
 
 def test_studio_invite_create_not_found_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="invite.notfound@kairos.dev")
+    headers = register_and_login(client, email="invite.notfound@myai.dev")
 
     response = client.post(
         "/v1/studio/invites",
         headers=headers,
-        json={"org_id": "missing-org", "email": "person@kairos.dev", "role": "member"},
+        json={"org_id": "missing-org", "email": "person@myai.dev", "role": "member"},
     )
 
     assert response.status_code == 404
@@ -135,7 +143,7 @@ def test_studio_invite_create_not_found_contract() -> None:
 
 def test_studio_invite_accept_email_mismatch_contract() -> None:
     client = TestClient(app)
-    owner_headers = register_and_login(client, email="invite.owner2@kairos.dev")
+    owner_headers = register_and_login(client, email="invite.owner2@myai.dev")
 
     org_response = client.post(
         "/v1/studio/organizations",
@@ -148,12 +156,12 @@ def test_studio_invite_accept_email_mismatch_contract() -> None:
     invite_response = client.post(
         "/v1/studio/invites",
         headers=owner_headers,
-        json={"org_id": org_id, "email": "expected.member@kairos.dev", "role": "member"},
+        json={"org_id": org_id, "email": "expected.member@myai.dev", "role": "member"},
     )
     assert invite_response.status_code == 200
     invite_id = invite_response.json()["data"]["invite_id"]
 
-    mismatched_headers = register_and_login(client, email="different.member@kairos.dev")
+    mismatched_headers = register_and_login(client, email="different.member@myai.dev")
     accept_response = client.post(
         f"/v1/studio/invites/{invite_id}/accept",
         headers=mismatched_headers,
@@ -167,7 +175,7 @@ def test_studio_invite_accept_email_mismatch_contract() -> None:
 
 def test_studio_onboarding_status_requires_org_context_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="onboarding.noorg@kairos.dev")
+    headers = register_and_login(client, email="onboarding.noorg@myai.dev")
 
     response = client.get("/v1/studio/onboarding/status", headers=headers)
 
@@ -178,7 +186,7 @@ def test_studio_onboarding_status_requires_org_context_contract() -> None:
 
 def test_studio_onboarding_complete_requires_org_context_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="onboarding.complete.noorg@kairos.dev")
+    headers = register_and_login(client, email="onboarding.complete.noorg@myai.dev")
 
     response = client.post("/v1/studio/onboarding/complete", headers=headers, json={"checklist": {}})
 
@@ -189,7 +197,7 @@ def test_studio_onboarding_complete_requires_org_context_contract() -> None:
 
 def test_studio_settings_patch_requires_org_context_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="settings.noorg@kairos.dev")
+    headers = register_and_login(client, email="settings.noorg@myai.dev")
 
     response = client.patch(
         "/v1/studio/settings",

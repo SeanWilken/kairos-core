@@ -1,8 +1,8 @@
 # UI Library Next Iteration Notes
 
-Purpose: track fixes and component extractions that should move into `@kairosstack/ui` so app repos stay thin and consistent.
+Purpose: track fixes and component extractions that should move into `@myai-tech/myui` so app repos stay thin and consistent.
 
-## Immediate Issues Observed in `kairos-core`
+## Immediate Issues Observed in `myai-core`
 
 - Select/dropdown content appears transparent, compressed, and incorrectly layered.
 - React warning appears for refs through `SlotClone` when using `DropdownMenuTrigger asChild` with current `Button` implementation.
@@ -12,7 +12,7 @@ Purpose: track fixes and component extractions that should move into `@kairossta
 
 - Added UI package path to Tailwind sources in `frontend/src/styles/tailwind.css`.
 - Temporary shell trigger buttons are native `button` elements to avoid ref warnings until UI `Button` is fully `forwardRef`-safe.
-- Added app-level overlay fallbacks in `frontend/src/styles/overrides.css` and explicit `kairos-*` classes on select/menu content/items to stabilize opacity, spacing, width, and z-index while UI primitives are being normalized.
+- Added app-level overlay fallbacks in `frontend/src/styles/overrides.css` and explicit `myai-*` classes on select/menu content/items to stabilize opacity, spacing, width, and z-index while UI primitives are being normalized.
 
 ## UI Library Work Items
 
@@ -54,7 +54,7 @@ Purpose: track fixes and component extractions that should move into `@kairossta
 - Validate focus ring visibility and contrast in light mode.
 - Validate overlay collision handling and viewport boundaries.
 
-## Candidates to Move from `kairos-core` into UI Library
+## Candidates to Move from `myai-core` into UI Library
 
 - Reusable step-navigation/sidebar pattern used by setup wizard (`StepSidebar`) after generic API extraction.
 - Reusable tag/chip entry field (`TagInput`) once generalized and tested.

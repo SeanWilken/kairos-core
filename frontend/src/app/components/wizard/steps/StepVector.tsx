@@ -1,5 +1,5 @@
 import { AlertTriangle, Layers } from "lucide-react";
-import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, cn } from "@kairosstack/ui";
+import { Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, cn } from "@myai-tech/myui";
 
 import type { StepProps, VectorMode } from "../types";
 
@@ -66,10 +66,10 @@ export function StepVector({ state, update }: StepProps) {
               <Label>Index Strategy</Label>
               <Select value={state.index_strategy} onValueChange={(v) => update({ index_strategy: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent className="kairos-overlay-content kairos-select-content">
-                  <SelectItem value="flat" className="kairos-overlay-item">flat</SelectItem>
-                  <SelectItem value="hnsw" className="kairos-overlay-item">hnsw</SelectItem>
-                  <SelectItem value="ivfflat" className="kairos-overlay-item">ivfflat</SelectItem>
+                <SelectContent className="myai-overlay-content myai-select-content">
+                  <SelectItem value="flat" className="myai-overlay-item">flat</SelectItem>
+                  <SelectItem value="hnsw" className="myai-overlay-item">hnsw</SelectItem>
+                  <SelectItem value="ivfflat" className="myai-overlay-item">ivfflat</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -6,7 +6,7 @@ from tests.contracts.v1._auth_helpers import register_and_login
 
 def test_realtime_council_summarized_orchestration_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="realtime.council@kairos.dev")
+    headers = register_and_login(client, email="realtime.council@myai.dev")
     token = headers["Authorization"].split(" ", 1)[1]
 
     org_response = client.post(
@@ -106,7 +106,7 @@ def test_realtime_council_summarized_orchestration_contract() -> None:
         )
 
         events: set[str] = set()
-        for _ in range(10):
+        for _ in range(20):
             event = websocket.receive_json()
             event_name = event.get("event")
             if isinstance(event_name, str):
@@ -114,10 +114,14 @@ def test_realtime_council_summarized_orchestration_contract() -> None:
             if {
                 "chat.message.user.created",
                 "council.delayed_start",
+                "chat.response.started",
+                "chat.response.block",
                 "council.response",
             }.issubset(events):
                 break
 
         assert "chat.message.user.created" in events
         assert "council.delayed_start" in events
+        assert "chat.response.started" in events
+        assert "chat.response.block" in events
         assert "council.response" in events

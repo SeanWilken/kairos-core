@@ -1,11 +1,11 @@
 # Core Bootstrap Roadmap
 
-This document defines the current bootstrap strategy for `kairos-core`.
+This document defines the current bootstrap strategy for `myai-core`.
 
 ## Scope boundary
 
-- `kairos-core` is the runtime/bootstrap engine and contract host.
-- `kairos-studio` will handle organization/division/persona/user/workflow authoring.
+- `myai-core` is the runtime/bootstrap engine and contract host.
+- `myai-studio` will handle organization/division/persona/user/workflow authoring.
 
 ## Bootstrap objective
 

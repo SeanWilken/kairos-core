@@ -6,7 +6,7 @@ from tests.contracts.v1._auth_helpers import register_and_login
 
 def test_persona_versioning_and_rollback_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="version.owner@kairos.dev")
+    headers = register_and_login(client, email="version.owner@myai.dev")
 
     org = client.post(
         "/v1/studio/organizations",
@@ -65,7 +65,7 @@ def test_persona_versioning_and_rollback_contract() -> None:
 
 def test_council_config_and_room_persona_assignment_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="council.owner@kairos.dev")
+    headers = register_and_login(client, email="council.owner@myai.dev")
 
     org = client.post(
         "/v1/studio/organizations",
@@ -135,7 +135,7 @@ def test_council_config_and_room_persona_assignment_contract() -> None:
 
 def test_user_persona_context_contract() -> None:
     client = TestClient(app)
-    headers = register_and_login(client, email="context.owner@kairos.dev")
+    headers = register_and_login(client, email="context.owner@myai.dev")
 
     org = client.post(
         "/v1/studio/organizations",

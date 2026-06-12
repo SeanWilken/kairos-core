@@ -58,7 +58,7 @@ def _simulated_response(
     if "return valid json" in lowered and all(
         key in lowered for key in ["introduction", "description", "features", "skills", "resume"]
     ):
-        persona_name = "Kairos Persona"
+        persona_name = "MyAI Persona"
         marker = "you are"
         lowered_system = system_prompt.lower()
         if marker in lowered_system:

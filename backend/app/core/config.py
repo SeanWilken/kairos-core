@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 def _default_database_url() -> str:
-    data_dir = Path.home() / ".kairos" / "kairos-core"
+    data_dir = Path.home() / ".myai" / "myai-core"
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_dir / "onboarding.db"
     return f"sqlite+pysqlite:///{db_path.as_posix()}"
@@ -55,14 +55,14 @@ def get_settings() -> Settings:
     }
 
     return Settings(
-        app_name=os.getenv("APP_NAME", "kairos-core-backend"),
+        app_name=os.getenv("APP_NAME", "myai-core-backend"),
         app_env=app_env,
         app_version=os.getenv("APP_VERSION", "0.1.0"),
         database_url=(
-            os.getenv("KAIROS_DATABASE_URL") or os.getenv("DATABASE_URL") or _default_database_url()
+            os.getenv("MYAI_DATABASE_URL") or os.getenv("DATABASE_URL") or _default_database_url()
         ),
         cors_allowed_origins=cors_allowed_origins,
-        jwt_secret=os.getenv("JWT_SECRET", "kairos-local-dev-secret-change-me"),
+        jwt_secret=os.getenv("JWT_SECRET", "myai-local-dev-secret-change-me"),
         jwt_access_token_ttl_minutes=int(os.getenv("JWT_ACCESS_TTL_MINUTES", "15")),
         jwt_refresh_token_ttl_days=int(os.getenv("JWT_REFRESH_TTL_DAYS", "14")),
         single_tenant_mode=single_tenant_mode,

@@ -10,6 +10,27 @@ def _join_lines(items: list[str]) -> str:
     return "\n".join([item for item in items if item.strip()])
 
 
+def _extract_assigned_tools(data: dict[str, Any], policies: dict[str, Any]) -> list[str]:
+    assigned = data.get("assigned_tools", []) if isinstance(data, dict) else []
+    if isinstance(assigned, list):
+        cleaned = [str(item).strip() for item in assigned if str(item).strip()]
+        if cleaned:
+            return cleaned
+
+    policy_tools = policies.get("tool_policies", []) if isinstance(policies, dict) else []
+    if not isinstance(policy_tools, list):
+        return []
+    parsed: list[str] = []
+    for item in policy_tools:
+        value = str(item).strip()
+        if not value:
+            continue
+        if value.startswith("enabled_tool:"):
+            value = value.split(":", 1)[1].strip()
+        parsed.append(value)
+    return [item for item in parsed if item]
+
+
 def compile_persona_system_prompt(persona: dict[str, Any]) -> str:
     explicit = str(persona.get("system_prompt", "")).strip()
     if explicit:
@@ -25,7 +46,7 @@ def compile_persona_system_prompt(persona: dict[str, Any]) -> str:
 
     lines: list[str] = []
     lines.append(
-        f"You are {persona.get('name', 'Kairos Assistant')}, acting as {persona.get('role', 'assistant')}."
+        f"You are {persona.get('name', 'MyAI Assistant')}, acting as {persona.get('role', 'assistant')}."
     )
     lines.append(f"Scope: {persona.get('scope', 'organization')}.")
 
@@ -56,6 +77,12 @@ def compile_persona_system_prompt(persona: dict[str, Any]) -> str:
             lines.append("Never do: " + "; ".join(str(item) for item in dont_list))
 
     if isinstance(policies, dict):
+        assigned_tools = _extract_assigned_tools(data, policies)
+        if assigned_tools:
+            lines.append("Enabled tools: " + ", ".join(assigned_tools))
+            lines.append(
+                "When a requested capability is not in enabled tools, clearly state that limitation before continuing."
+            )
         for key, prefix in [
             ("tool_policies", "Tool policy"),
             ("escalation_rules", "Escalation rules"),

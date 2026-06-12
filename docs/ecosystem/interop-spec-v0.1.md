@@ -6,7 +6,7 @@ Define minimum interoperable contracts so external repos can integrate with the 
 
 This spec is designed for multiple interaction modes:
 
-- full Kairos reference UI
+- full MyAI reference UI
 - external wrappers/frontends
 - direct API consumption without chat-room UX
 

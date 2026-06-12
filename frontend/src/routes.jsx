@@ -1,6 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 
-import { KairosShell } from "./app/components/layout/KairosShell";
+import { MyAIShell } from "./app/components/layout/CoreShell";
 import { CoreSetupHome } from "./app/components/pages/CoreSetupHome";
 import { Backups } from "./app/components/pages/Backups";
 import { Retrain } from "./app/components/pages/Retrain";
@@ -10,7 +10,7 @@ export const router = createBrowserRouter(
   [
     {
       path: "/",
-      element: <KairosShell />,
+      element: <MyAIShell />,
       children: [
         { index: true, element: <CoreSetupHome /> },
         { path: "backups", element: <Backups /> },

@@ -46,6 +46,12 @@ def get_ai_provider_catalog() -> dict[str, Any]:
                 {"tool_id": "chat_completion", "capability": "chat"},
                 {"tool_id": "image_generation", "capability": "image_generation"},
             ],
+            "response_controls": {
+                "effort_levels": ["fast", "balanced", "deep"],
+                "default_effort": "balanced",
+                "response_types": ["conversation", "markdown", "summary", "reporting"],
+                "default_response_type": "conversation",
+            },
         },
         {
             "provider_id": "google",
@@ -66,6 +72,12 @@ def get_ai_provider_catalog() -> dict[str, Any]:
                 {"tool_id": "nano_banana", "capability": "image_generation"},
                 {"tool_id": "video_generation", "capability": "video_generation"},
             ],
+            "response_controls": {
+                "effort_levels": ["fast", "balanced", "deep"],
+                "default_effort": "balanced",
+                "response_types": ["conversation", "markdown", "summary", "reporting"],
+                "default_response_type": "conversation",
+            },
         },
         {
             "provider_id": "anthropic",
@@ -78,6 +90,12 @@ def get_ai_provider_catalog() -> dict[str, Any]:
             },
             "capabilities": ["chat"],
             "tools": [{"tool_id": "chat_completion", "capability": "chat"}],
+            "response_controls": {
+                "effort_levels": ["fast", "balanced", "deep"],
+                "default_effort": "balanced",
+                "response_types": ["conversation", "markdown", "summary", "reporting"],
+                "default_response_type": "conversation",
+            },
         },
         {
             "provider_id": "email",
@@ -89,6 +107,12 @@ def get_ai_provider_catalog() -> dict[str, Any]:
                 {"tool_id": "email_send", "capability": "email_send"},
                 {"tool_id": "email_read", "capability": "email_read"},
             ],
+            "response_controls": {
+                "effort_levels": [],
+                "default_effort": "",
+                "response_types": ["conversation"],
+                "default_response_type": "conversation",
+            },
         },
     ]
 
@@ -118,11 +142,13 @@ def get_provider_models(*, provider_id: str, capability: str | None = None) -> d
                 "models": models.get(capability, []),
                 "default_model": (provider.get("default_models", {}) or {}).get(capability),
                 "configured": bool(provider.get("configured", False)),
+                "response_controls": provider.get("response_controls", {}),
             }
         return {
             "provider_id": provider_id,
             "models": models,
             "default_models": provider.get("default_models", {}),
             "configured": bool(provider.get("configured", False)),
+            "response_controls": provider.get("response_controls", {}),
         }
     return None

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kairos.dev/schemas/interop/v0.2/bootstrap-local-env-input.schema.json",
+  "$id": "https://myai.dev/schemas/interop/v0.2/bootstrap-local-env-input.schema.json",
   "title": "BootstrapLocalEnvInput",
   "type": "object",
   "additionalProperties": false,
@@ -39,8 +39,8 @@
         "deployment_location": { "type": "string", "enum": ["local", "remote"] },
         "host": { "type": "string", "minLength": 1, "default": "localhost" },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535, "default": 5432 },
-        "database_name": { "type": "string", "minLength": 1, "default": "kairos" },
-        "username": { "type": "string", "minLength": 1, "default": "kairos" },
+        "database_name": { "type": "string", "minLength": 1, "default": "myai" },
+        "username": { "type": "string", "minLength": 1, "default": "myai" },
         "password": {
           "type": "string",
           "minLength": 1,

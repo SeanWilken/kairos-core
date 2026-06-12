@@ -1,6 +1,6 @@
-# Kairos Operating Model (v0.1)
+# MyAI Operating Model (v0.1)
 
-This document defines how all Kairos repos work together: architecture boundaries, contracts, testing, documentation, quality gates, and PR workflow.
+This document defines how all MyAI repos work together: architecture boundaries, contracts, testing, documentation, quality gates, and PR workflow.
 
 ## 1) Purpose
 
@@ -12,12 +12,12 @@ We optimize for:
 
 ## 2) Repo Boundaries (Source of Truth)
 
-- `kairos-core`: runtime engine, API contracts, bootstrap/deployment orchestration, ingest/vectorization pipeline.
-- `kairos-studio`: administrative/control-plane UX (org/division/persona/users/tools/workflows).
-- `kairos-council`: multi-agent collaboration UX and orchestration interaction.
-- `kairos-agent`: end-user/internal assistant surfaces.
-- `kairos-sdk`: typed clients + contract bindings for apps/integrators.
-- `kairos-ui`: shared UI primitives/composites; contract-agnostic.
+- `myai-core`: runtime engine, API contracts, bootstrap/deployment orchestration, ingest/vectorization pipeline.
+- `myai-studio`: administrative/control-plane UX (org/division/persona/users/tools/workflows).
+- `myai-council`: multi-agent collaboration UX and orchestration interaction.
+- `myai-agent`: end-user/internal assistant surfaces.
+- `myai-sdk`: typed clients + contract bindings for apps/integrators.
+- `myai-ui`: shared UI primitives/composites; contract-agnostic.
 - Other repos: adapters/plugins/extensions must consume published contracts.
 
 Rule:
@@ -135,7 +135,7 @@ Preferred docs:
 
 When Core contracts change:
 1. update schemas/OpenAPI/compat notes
-2. release/update `kairos-sdk` types/clients
+2. release/update `myai-sdk` types/clients
 3. adapt app edge mappers (`studio`, `council`, etc.)
 4. update integration tests in consuming repos
 

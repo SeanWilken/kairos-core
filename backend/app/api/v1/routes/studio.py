@@ -11,6 +11,8 @@ from app.core.auth_context import require_authentication, require_roles
 from app.core.response import ok_response
 from app.core.schemas import Envelope
 from app.core.studio_store import studio_store
+from app.core.tool_execution_store import tool_execution_store
+from app.core.tool_runtime import send_email_tool
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -192,14 +194,31 @@ def create_organization(
     request: Request, payload: StudioOrganizationCreatePayload
 ) -> dict[str, Any]:
     auth = require_authentication(request)
-    require_roles(auth, {"owner", "admin"})
+    if not auth.is_global_admin and not auth.org_id and not auth.roles:
+        # Allow first org bootstrap for tenant-scoped users before membership exists.
+        pass
+    else:
+        require_roles(auth, {"owner", "admin"})
     organization = studio_store.create_organization(
         tenant_id=auth.tenant_id,
         name=payload.name,
         slug=payload.slug,
         mode=payload.mode,
-        owner_user_id=payload.owner_user_id,
+        owner_user_id=payload.owner_user_id or auth.user_id,
     )
+    existing_membership = studio_store.get_membership_by_org_user(
+        tenant_id=auth.tenant_id,
+        org_id=organization["org_id"],
+        user_id=auth.user_id,
+    )
+    if existing_membership is None:
+        studio_store.create_membership(
+            tenant_id=auth.tenant_id,
+            org_id=organization["org_id"],
+            user_id=auth.user_id,
+            role="owner",
+            status="active",
+        )
     return ok_response(request, data=organization)
 
 
@@ -287,6 +306,20 @@ def create_user(request: Request, payload: StudioUserCreatePayload) -> dict[str,
 def list_users(request: Request, org_id: str | None = Query(default=None)) -> dict[str, Any]:
     auth = require_authentication(request)
     target_org_id = org_id or auth.org_id
+    if target_org_id:
+        resolved_org = studio_store.resolve_organization_identifier(
+            tenant_id=auth.tenant_id,
+            identifier=target_org_id,
+        )
+        if resolved_org is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "message": "Organization not found.",
+                    "details": {"reason_code": "STUDIO_ORG_NOT_FOUND"},
+                },
+            )
+        target_org_id = resolved_org["org_id"]
     _enforce_org_scope(auth.org_id, target_org_id, is_global_admin=auth.is_global_admin)
     users = studio_store.list_users(tenant_id=auth.tenant_id, org_id=target_org_id)
     return ok_response(request, data={"items": users})
@@ -483,6 +516,51 @@ def create_invite(request: Request, payload: StudioInviteCreatePayload) -> dict[
         invited_by_user_id=auth.user_id,
         expires_at=expires_at,
     )
+    org_name = str(organization.get("name", "organization"))
+    invite_link = f"{request.url.scheme}://{request.url.netloc}/invites/{invite['invite_id']}"
+    subject = f"Invitation to join {org_name}"
+    body = (
+        f"You have been invited to join {org_name} as {invite['role']}.\n\n"
+        f"Invite ID: {invite['invite_id']}\n"
+        f"Expires: {invite.get('expires_at')}\n"
+        f"Accept link: {invite_link}\n"
+    )
+    transport = send_email_tool(
+        sender="noreply@myai.local",
+        recipients=[invite["email"]],
+        subject=subject,
+        body=body,
+    )
+    email_message = tool_execution_store.create_email(
+        tenant_id=auth.tenant_id,
+        org_id=target_org_id,
+        sender="noreply@myai.local",
+        recipients=[invite["email"]],
+        subject=subject,
+        body=body,
+        created_by_user_id=auth.user_id,
+        status=str(transport.get("status", "sent")),
+        metadata=transport,
+    )
+    tool_execution_store.create_execution(
+        tenant_id=auth.tenant_id,
+        org_id=target_org_id,
+        tool_id="email_send",
+        provider_id=str(transport.get("provider_id", "email")),
+        model_id="",
+        input_payload={
+            "recipients": [invite["email"]],
+            "subject": subject,
+            "invite_id": invite["invite_id"],
+        },
+        output_payload={
+            "email_id": email_message["email_id"],
+            "status": email_message["status"],
+            "transport": transport,
+        },
+        created_by_user_id=auth.user_id,
+        status=str(transport.get("status", "completed")),
+    )
     return ok_response(request, data=invite)
 
 
@@ -652,10 +730,21 @@ def patch_settings(request: Request, payload: StudioOrgSettingsPatchPayload) -> 
     require_roles(auth, {"owner", "admin"})
     target_org_id = _resolve_target_org_id(request, auth.org_id, payload.org_id)
     _enforce_org_scope(auth.org_id, target_org_id, is_global_admin=auth.is_global_admin)
-    settings = studio_store.update_org_settings(
-        tenant_id=auth.tenant_id,
-        org_id=target_org_id,
-        patch=payload.settings,
-        updated_by_user_id=auth.user_id,
-    )
+    try:
+        settings = studio_store.update_org_settings(
+            tenant_id=auth.tenant_id,
+            org_id=target_org_id,
+            patch=payload.settings,
+            updated_by_user_id=auth.user_id,
+        )
+    except ValueError as error:
+        if str(error) != "organization_not_found":
+            raise
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "Organization not found.",
+                "details": {"reason_code": "STUDIO_ORG_NOT_FOUND"},
+            },
+        ) from error
     return ok_response(request, data=settings)

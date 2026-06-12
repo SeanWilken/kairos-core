@@ -1,6 +1,6 @@
-# Kairos Core
+# MyAI Core
 
-![CI](https://github.com/SeanWilken/kairos-core/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/SeanWilken/myai-core/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
 
 Open-source core training/orchestration stack for tailoring AI assistants to a person, team, or business.
@@ -18,7 +18,7 @@ It is designed to work as:
 
 ## Repo Intent
 
-This repository is the Kairos core runtime. Its job is to help people:
+This repository is the MyAI core runtime. Its job is to help people:
 
 - stand up an AI runtime locally or through an API provider,
 - onboard data and preferences in a structured way,
@@ -119,6 +119,10 @@ See service-specific setup:
 - `backend/README.md`
 - `frontend/README.md`
 - `infra/README.md`
+
+POC bootstrap for sibling suite repos:
+
+- `POC_QUICKSTART.md`
 
 ## Current backend status
 

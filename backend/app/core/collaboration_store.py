@@ -17,6 +17,8 @@ from app.core.db_models import (
     StudioChannelModel,
     StudioChannelParticipantModel,
     StudioDivisionModel,
+    StudioMeetingModel,
+    StudioMeetingParticipantModel,
     StudioPersonaModel,
     StudioTaskAssignmentModel,
     StudioTaskModel,
@@ -286,6 +288,14 @@ class CollaborationStore:
                 StudioPersonaModel.tenant_id == tenant_id,
                 StudioPersonaModel.org_id == org_id,
             )
+            if enabled_only:
+                stmt = stmt.where(StudioPersonaModel.enabled.is_(True))
+            rows = db.scalars(stmt.order_by(StudioPersonaModel.created_at.asc())).all()
+            return [self._to_persona_dict(row) for row in rows]
+
+    def list_personas_any_org(self, *, tenant_id: str, enabled_only: bool = False) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            stmt = select(StudioPersonaModel).where(StudioPersonaModel.tenant_id == tenant_id)
             if enabled_only:
                 stmt = stmt.where(StudioPersonaModel.enabled.is_(True))
             rows = db.scalars(stmt.order_by(StudioPersonaModel.created_at.asc())).all()
@@ -782,6 +792,27 @@ class CollaborationStore:
             return [self._to_room_persona_dict(row) for row in rows]
 
     def _to_task_dict(self, model: StudioTaskModel) -> dict[str, Any]:
+        tags = []
+        metadata = {}
+        related_node_ids = []
+        try:
+            loaded = json.loads(model.tags_json or "[]")
+            if isinstance(loaded, list):
+                tags = [str(item) for item in loaded]
+        except Exception:
+            tags = []
+        try:
+            loaded = json.loads(model.metadata_json or "{}")
+            if isinstance(loaded, dict):
+                metadata = loaded
+        except Exception:
+            metadata = {}
+        try:
+            loaded = json.loads(model.related_node_ids_json or "[]")
+            if isinstance(loaded, list):
+                related_node_ids = [str(item) for item in loaded]
+        except Exception:
+            related_node_ids = []
         return {
             "task_id": model.task_id,
             "tenant_id": model.tenant_id,
@@ -791,6 +822,10 @@ class CollaborationStore:
             "description": model.description,
             "status": model.status,
             "visibility": model.visibility,
+            "tags": tags,
+            "metadata": metadata,
+            "related_node_ids": related_node_ids,
+            "channel_id": model.channel_id,
             "owner_user_id": model.owner_user_id,
             "created_at": _dt_iso(model.created_at),
             "updated_at": _dt_iso(model.updated_at),
@@ -802,6 +837,60 @@ class CollaborationStore:
             "tenant_id": model.tenant_id,
             "task_id": model.task_id,
             "assignee_user_id": model.assignee_user_id,
+            "status": model.status,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_meeting_dict(self, model: StudioMeetingModel) -> dict[str, Any]:
+        tags = []
+        metadata = {}
+        agenda = []
+        try:
+            loaded = json.loads(model.tags_json or "[]")
+            if isinstance(loaded, list):
+                tags = [str(item) for item in loaded]
+        except Exception:
+            tags = []
+        try:
+            loaded = json.loads(model.metadata_json or "{}")
+            if isinstance(loaded, dict):
+                metadata = loaded
+        except Exception:
+            metadata = {}
+        try:
+            loaded = json.loads(model.agenda_json or "[]")
+            if isinstance(loaded, list):
+                agenda = [str(item) for item in loaded]
+        except Exception:
+            agenda = []
+        return {
+            "meeting_id": model.meeting_id,
+            "tenant_id": model.tenant_id,
+            "org_id": model.org_id,
+            "team_id": model.team_id,
+            "channel_id": model.channel_id,
+            "title": model.title,
+            "description": model.description,
+            "status": model.status,
+            "scheduled_start_at": _dt_iso(model.scheduled_start_at),
+            "scheduled_end_at": _dt_iso(model.scheduled_end_at),
+            "timezone": model.timezone,
+            "tags": tags,
+            "metadata": metadata,
+            "agenda": agenda,
+            "created_by_user_id": model.created_by_user_id,
+            "created_at": _dt_iso(model.created_at),
+            "updated_at": _dt_iso(model.updated_at),
+        }
+
+    def _to_meeting_participant_dict(self, model: StudioMeetingParticipantModel) -> dict[str, Any]:
+        return {
+            "participant_id": model.participant_id,
+            "tenant_id": model.tenant_id,
+            "meeting_id": model.meeting_id,
+            "user_id": model.user_id,
+            "role": model.role,
             "status": model.status,
             "created_at": _dt_iso(model.created_at),
             "updated_at": _dt_iso(model.updated_at),
@@ -1227,6 +1316,10 @@ class CollaborationStore:
         visibility: str,
         status: str = "todo",
         team_id: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        related_node_ids: list[str] | None = None,
+        channel_id: str | None = None,
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
         with SessionLocal() as db:
@@ -1239,6 +1332,10 @@ class CollaborationStore:
                 description=description,
                 status=status,
                 visibility=visibility,
+                tags_json=json.dumps(tags or []),
+                metadata_json=json.dumps(metadata or {}),
+                related_node_ids_json=json.dumps(related_node_ids or []),
+                channel_id=channel_id,
                 owner_user_id=owner_user_id,
                 created_at=now,
                 updated_at=now,
@@ -1268,6 +1365,10 @@ class CollaborationStore:
         status: str | None = None,
         visibility: str | None = None,
         team_id: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        related_node_ids: list[str] | None = None,
+        channel_id: str | None = None,
     ) -> dict[str, Any] | None:
         with SessionLocal() as db:
             row = db.scalar(
@@ -1288,6 +1389,14 @@ class CollaborationStore:
                 row.visibility = visibility
             if team_id is not None:
                 row.team_id = team_id
+            if tags is not None:
+                row.tags_json = json.dumps(tags)
+            if metadata is not None:
+                row.metadata_json = json.dumps(metadata)
+            if related_node_ids is not None:
+                row.related_node_ids_json = json.dumps(related_node_ids)
+            if channel_id is not None:
+                row.channel_id = channel_id
             row.updated_at = datetime.now(timezone.utc)
             db.add(row)
             db.commit()
@@ -1368,6 +1477,165 @@ class CollaborationStore:
                 )
             )
             return self._to_assignment_dict(row) if row else None
+
+    def create_meeting(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        team_id: str | None,
+        channel_id: str | None,
+        title: str,
+        description: str,
+        status: str,
+        scheduled_start_at: datetime,
+        scheduled_end_at: datetime,
+        timezone_name: str,
+        tags: list[str],
+        metadata: dict[str, Any],
+        agenda: list[str],
+        created_by_user_id: str,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        with SessionLocal() as db:
+            row = StudioMeetingModel(
+                meeting_id=str(uuid4()),
+                tenant_id=tenant_id,
+                org_id=org_id,
+                team_id=team_id,
+                channel_id=channel_id,
+                title=title,
+                description=description,
+                status=status,
+                scheduled_start_at=scheduled_start_at,
+                scheduled_end_at=scheduled_end_at,
+                timezone=timezone_name,
+                tags_json=json.dumps(tags),
+                metadata_json=json.dumps(metadata),
+                agenda_json=json.dumps(agenda),
+                created_by_user_id=created_by_user_id,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return self._to_meeting_dict(row)
+
+    def list_meetings(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        team_id: str | None = None,
+        channel_id: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            stmt = select(StudioMeetingModel).where(
+                StudioMeetingModel.tenant_id == tenant_id,
+                StudioMeetingModel.org_id == org_id,
+            )
+            if team_id is not None:
+                stmt = stmt.where(StudioMeetingModel.team_id == team_id)
+            if channel_id is not None:
+                stmt = stmt.where(StudioMeetingModel.channel_id == channel_id)
+            if status is not None:
+                stmt = stmt.where(StudioMeetingModel.status == status)
+            rows = db.scalars(stmt.order_by(desc(StudioMeetingModel.scheduled_start_at))).all()
+            return [self._to_meeting_dict(row) for row in rows]
+
+    def get_meeting(self, *, tenant_id: str, meeting_id: str) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            row = db.scalar(
+                select(StudioMeetingModel).where(
+                    StudioMeetingModel.tenant_id == tenant_id,
+                    StudioMeetingModel.meeting_id == meeting_id,
+                )
+            )
+            return self._to_meeting_dict(row) if row else None
+
+    def update_meeting(
+        self,
+        *,
+        tenant_id: str,
+        meeting_id: str,
+        patch: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        with SessionLocal() as db:
+            row = db.scalar(
+                select(StudioMeetingModel).where(
+                    StudioMeetingModel.tenant_id == tenant_id,
+                    StudioMeetingModel.meeting_id == meeting_id,
+                )
+            )
+            if row is None:
+                return None
+            if "title" in patch:
+                row.title = str(patch.get("title") or row.title)
+            if "description" in patch:
+                row.description = str(patch.get("description") or "")
+            if "status" in patch:
+                row.status = str(patch.get("status") or row.status)
+            if "team_id" in patch:
+                row.team_id = patch.get("team_id")
+            if "channel_id" in patch:
+                row.channel_id = patch.get("channel_id")
+            if "scheduled_start_at" in patch and isinstance(patch.get("scheduled_start_at"), datetime):
+                row.scheduled_start_at = patch["scheduled_start_at"]
+            if "scheduled_end_at" in patch and isinstance(patch.get("scheduled_end_at"), datetime):
+                row.scheduled_end_at = patch["scheduled_end_at"]
+            if "timezone" in patch:
+                row.timezone = str(patch.get("timezone") or row.timezone)
+            if "tags" in patch and isinstance(patch.get("tags"), list):
+                row.tags_json = json.dumps([str(item) for item in patch["tags"]])
+            if "metadata" in patch and isinstance(patch.get("metadata"), dict):
+                row.metadata_json = json.dumps(patch["metadata"])
+            if "agenda" in patch and isinstance(patch.get("agenda"), list):
+                row.agenda_json = json.dumps([str(item) for item in patch["agenda"]])
+            row.updated_at = datetime.now(timezone.utc)
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return self._to_meeting_dict(row)
+
+    def create_meeting_participant(
+        self,
+        *,
+        tenant_id: str,
+        meeting_id: str,
+        user_id: str,
+        role: str,
+        status: str,
+    ) -> dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        with SessionLocal() as db:
+            row = StudioMeetingParticipantModel(
+                participant_id=str(uuid4()),
+                tenant_id=tenant_id,
+                meeting_id=meeting_id,
+                user_id=user_id,
+                role=role,
+                status=status,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(row)
+            db.commit()
+            db.refresh(row)
+            return self._to_meeting_participant_dict(row)
+
+    def list_meeting_participants(self, *, tenant_id: str, meeting_id: str) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            rows = db.scalars(
+                select(StudioMeetingParticipantModel)
+                .where(
+                    StudioMeetingParticipantModel.tenant_id == tenant_id,
+                    StudioMeetingParticipantModel.meeting_id == meeting_id,
+                )
+                .order_by(StudioMeetingParticipantModel.created_at.asc())
+            ).all()
+            return [self._to_meeting_participant_dict(row) for row in rows]
 
 
 collaboration_store = CollaborationStore()

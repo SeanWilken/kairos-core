@@ -1,5 +1,5 @@
 @import "tailwindcss" source(none);
 @source "../**/*.{js,ts,jsx,tsx}";
-@source "../../node_modules/@kairosstack/ui/**/*.{js,ts,jsx,tsx}";
+@source "../../node_modules/@myai-tech/myui/**/*.{js,ts,jsx,tsx}";
 
 @import "tw-animate-css";

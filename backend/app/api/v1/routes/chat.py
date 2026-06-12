@@ -1,22 +1,27 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.audit_store import audit_store
 from app.core.auth_context import AuthContext, require_authentication, require_roles
+from app.core.chat_contracts import normalize_chat_controls
 from app.core.collaboration_store import collaboration_store
 from app.core.context_window_service import context_window_service
 from app.core.fallback_store import fallback_store
 from app.core.model_gateway import ModelRequest, model_gateway
 from app.core.persona_prompt import compile_persona_system_prompt, compile_persona_system_prompt_resolved
+from app.core.prompt_template_runtime import resolve_rendered_prompt_template
 from app.core.resume_export_adapter import build_provider_resume_export
 from app.core.resume_adapter_policy_store import resume_adapter_policy_store
 from app.core.response import ok_response
 from app.core.studio_store import studio_store
-from app.core.tool_provider_registry import is_provider_configured
+from app.core.tool_execution_store import tool_execution_store
+from app.core.tool_runtime import generate_image_tool
+from app.core.tool_provider_registry import get_ai_provider_catalog, is_provider_configured
 
 router = APIRouter(prefix="/studio", tags=["studio-chat"])
 
@@ -93,9 +98,19 @@ class ChannelPolicyPatchPayload(BaseModel):
 
 
 class ChannelChatPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     content: str = Field(min_length=1)
     persona_id: str | None = None
     mode: str = Field(default="single_best")
+    response_type: str = Field(default="conversation")
+    chat_type: str = Field(default="one_to_one")
+    global_controls: dict[str, Any] = Field(default_factory=dict)
+    participant_controls: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    persona_overrides: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    explicit_persona_calls: list[str] = Field(default_factory=list)
+    auto_execute_tools: bool = True
+    strict_validation: bool = False
 
 
 def _enforce_org_scope(auth: AuthContext, org_id: str) -> None:
@@ -183,6 +198,275 @@ def _persona_fallback_policy(persona: dict[str, Any] | None) -> dict[str, Any]:
     return {}
 
 
+def _append_prompt(base: str, extension: str) -> str:
+    left = str(base or "").strip()
+    right = str(extension or "").strip()
+    if not right:
+        return left
+    if not left:
+        return right
+    return f"{left}\n\n{right}"
+
+
+def _parse_image_command(content: str) -> str:
+    text = str(content or "").strip()
+    if not text.lower().startswith("/image"):
+        return ""
+    parts = text.split(" ", 1)
+    if len(parts) < 2:
+        return ""
+    return parts[1].strip()
+
+
+def _response_type_instruction(response_type: str) -> str:
+    kind = str(response_type or "conversation").strip().lower()
+    if kind == "markdown":
+        return "Return well-structured markdown with headings, short lists, and code fences when useful."
+    if kind == "summary":
+        return "Return a concise executive summary with key decisions, risks, and next actions."
+    if kind == "reporting":
+        return (
+            "Return a reporting-oriented response with sections for findings, metrics, assumptions, "
+            "and tabular data where possible."
+        )
+    return "Return a natural conversational response."
+
+
+def _persona_access_level(persona: dict[str, Any]) -> str:
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    access = data.get("access_policy", {}) if isinstance(data.get("access_policy"), dict) else {}
+    level = str(access.get("visibility", "organization")).strip().lower()
+    return level or "organization"
+
+
+def _can_access_persona(*, auth: AuthContext, persona: dict[str, Any]) -> bool:
+    level = _persona_access_level(persona)
+    if level in {"admin_only", "restricted_admin"}:
+        return bool(auth.is_global_admin or any(role in {"owner", "admin"} for role in auth.roles))
+    return True
+
+
+def _infer_image_prompt(content: str) -> str:
+    text = str(content or "").strip()
+    lowered = text.lower()
+    if lowered.startswith("/image"):
+        return _parse_image_command(text)
+    triggers = ["create an image", "generate an image", "hero image", "mockup", "visual concept"]
+    if any(token in lowered for token in triggers):
+        return text
+    return ""
+
+
+def _build_structured_content(
+    *,
+    text: str,
+    response_type: str,
+    attachments: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    kind = str(response_type or "conversation").strip().lower()
+    blocks = _segment_structured_blocks(text=text, response_type=kind)
+    block_types = [str(block.get("type", "")).strip().lower() for block in blocks if isinstance(block, dict)]
+    unique_non_image_types = [item for item in block_types if item and item != "image"]
+    unique_non_image_types = list(dict.fromkeys(unique_non_image_types))
+    if not unique_non_image_types:
+        primary_type = "markdown" if kind in {"markdown", "summary", "reporting"} else "text"
+    elif len(unique_non_image_types) == 1:
+        primary_type = unique_non_image_types[0]
+    else:
+        primary_type = "mixed"
+    for item in attachments or []:
+        if str(item.get("type", "")).strip().lower() != "image":
+            continue
+        blocks.append(
+            {
+                "type": "image",
+                "url": str(item.get("asset_url", "")),
+                "alt": "Generated image",
+                "caption": str(item.get("status", "")),
+                "mime_type": str(item.get("mime_type", "image/png")),
+                "image_base64": str(item.get("image_base64", "")),
+            }
+        )
+    return {
+        "version": "v1",
+        "primary_type": primary_type,
+        "response_type": kind,
+        "render_hint": (
+            "markdown"
+            if primary_type == "markdown"
+            else "structured_blocks" if primary_type == "mixed" else "plain_text"
+        ),
+        "blocks": blocks,
+    }
+
+
+def _build_content_block(*, kind: str, body: str, index: int) -> dict[str, Any]:
+    block_id = f"block:{index}"
+    capabilities = {
+        "replyable": True,
+        "editable": kind == "markdown",
+        "saveable": kind in {"markdown", "text", "code"},
+        "copyable": True,
+    }
+    if kind == "markdown":
+        return {
+            "block_id": block_id,
+            "type": "markdown",
+            "markdown": body,
+            "capabilities": capabilities,
+        }
+    return {
+        "block_id": block_id,
+        "type": "text",
+        "text": body,
+        "capabilities": capabilities,
+    }
+
+
+def _segment_structured_blocks(*, text: str, response_type: str) -> list[dict[str, Any]]:
+    content = str(text or "").replace("\r\n", "\n")
+    if not content.strip():
+        return [{"type": "text", "text": ""}]
+
+    blocks = _split_mixed_blocks(content)
+    kind = str(response_type or "").strip().lower()
+    if kind in {"markdown", "summary", "reporting"}:
+        non_image_blocks = [block for block in blocks if str(block.get("type", "")).strip().lower() != "image"]
+        if non_image_blocks and all(str(block.get("type", "")).strip().lower() == "text" for block in non_image_blocks):
+            return [_build_content_block(kind="markdown", body=content, index=0)]
+    return blocks
+
+
+def _split_mixed_blocks(text: str) -> list[dict[str, Any]]:
+    lines = text.split("\n")
+    segments: list[tuple[str, str]] = []
+    current_lines: list[str] = []
+    current_kind: str | None = None
+    in_code_block = False
+
+    def flush() -> None:
+        nonlocal current_lines, current_kind
+        if not current_lines:
+            current_kind = None
+            return
+        body = "\n".join(current_lines).strip("\n")
+        if body:
+            segments.append((current_kind or "text", body))
+        current_lines = []
+        current_kind = None
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if not in_code_block:
+                flush()
+                in_code_block = True
+                current_kind = "markdown"
+                current_lines = [line]
+            else:
+                current_lines.append(line)
+                flush()
+                in_code_block = False
+            continue
+
+        if in_code_block:
+            current_lines.append(line)
+            continue
+
+        if not stripped:
+            flush()
+            continue
+
+        line_kind = "markdown" if _looks_like_markdown_line(stripped) else "text"
+        if current_kind is None:
+            current_kind = line_kind
+            current_lines = [line]
+            continue
+        if line_kind != current_kind:
+            flush()
+            current_kind = line_kind
+            current_lines = [line]
+            continue
+        current_lines.append(line)
+
+    flush()
+
+    if not segments:
+        return [{"type": "text", "text": text}]
+
+    blocks: list[dict[str, Any]] = []
+    for index, (kind, body) in enumerate(segments):
+        blocks.append(_build_content_block(kind=kind, body=body, index=index))
+    return blocks
+
+
+def _looks_like_markdown_line(line: str) -> bool:
+    if re.match(r"^#{1,6}\s", line):
+        return True
+    if re.match(r"^[-*+]\s", line):
+        return True
+    if re.match(r"^\d+\.\s", line):
+        return True
+    if re.match(r"^>\s", line):
+        return True
+    if re.match(r"^[-*_]{3,}$", line):
+        return True
+    if line.startswith("|") and line.endswith("|"):
+        return True
+    return False
+
+
+def _build_chat_options(
+    *,
+    tenant_id: str,
+    org_id: str,
+    channel_id: str,
+    selected_persona_id: str | None,
+) -> dict[str, Any]:
+    settings = studio_store.get_org_settings(tenant_id=tenant_id, org_id=org_id)
+    org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
+    room_personas = collaboration_store.list_room_personas(tenant_id=tenant_id, room_id=channel_id)
+    participant_options: list[dict[str, Any]] = []
+    for room_persona in room_personas:
+        persona_id = str(room_persona.get("persona_id", "")).strip()
+        if not persona_id:
+            continue
+        persona = collaboration_store.get_persona(tenant_id=tenant_id, persona_id=persona_id)
+        if persona is None:
+            continue
+        provider_id, model_id = _persona_runtime_model_settings(persona)
+        participant_options.append(
+            {
+                "persona_id": persona_id,
+                "name": persona.get("name", ""),
+                "role_in_room": room_persona.get("role_in_room", "member"),
+                "model_profile": persona.get("model_profile", "reasoning-optimized"),
+                "runtime_provider_id": provider_id or "",
+                "runtime_model_id": model_id or "",
+                "response_types": ["conversation", "markdown", "summary", "reporting"],
+                "modes": ["single_best", "council", "summarized", "threaded", "silent_head"],
+            }
+        )
+
+    return {
+        "administrator_default_persona_id": selected_persona_id,
+        "response_types": ["conversation", "markdown", "summary", "reporting"],
+        "modes": ["single_best", "council", "summarized", "threaded", "silent_head"],
+        "workflow_actions": ["general", "focus_group", "tasking", "agent"],
+        "prompt_template_kinds": [
+            "system_prompt",
+            "planner_prompt",
+            "tool_call_prompt",
+            "focus_group_prompt",
+            "tasking_prompt",
+            "reflection_prompt",
+        ],
+        "parallel_enabled": bool(org_settings.get("orchestration_parallel_enabled", False)),
+        "max_personas": int(org_settings.get("orchestration_max_personas", 4) or 4),
+        "participant_options": participant_options,
+    }
+
+
 def _merge_persona_runtime(
     *,
     base_data: dict[str, Any],
@@ -206,12 +490,18 @@ def _validate_runtime_provider(*, tenant_id: str, org_id: str, provider_id: str 
     normalized = str(provider_id or "").strip().lower()
     if not normalized:
         return
-    if not is_provider_configured(normalized):
+    provider_catalog = get_ai_provider_catalog()
+    known_provider_ids = {
+        str(item.get("provider_id", "")).strip().lower()
+        for item in provider_catalog.get("providers", [])
+        if isinstance(item, dict)
+    }
+    if normalized not in known_provider_ids:
         raise HTTPException(
             status_code=422,
             detail={
-                "message": "Selected runtime provider is not configured.",
-                "details": {"reason_code": "STUDIO_PERSONA_PROVIDER_UNAVAILABLE", "provider_id": normalized},
+                "message": "Selected runtime provider is unknown.",
+                "details": {"reason_code": "STUDIO_PERSONA_PROVIDER_UNKNOWN", "provider_id": normalized},
             },
         )
     settings = studio_store.get_org_settings(tenant_id=tenant_id, org_id=org_id)
@@ -281,17 +571,45 @@ def create_persona(request: Request, payload: PersonaCreatePayload) -> dict[str,
 @router.get("/personas")
 def list_personas(
     request: Request,
-    org_id: str = Query(min_length=1),
+    org_id: str | None = Query(default=None),
     enabled_only: bool = Query(default=False),
 ) -> dict[str, Any]:
-    auth = require_authentication(request, require_org=True)
-    _enforce_org_scope(auth, org_id)
-    items = collaboration_store.list_personas(
-        tenant_id=auth.tenant_id,
-        org_id=org_id,
-        enabled_only=enabled_only,
-    )
-    settings = studio_store.get_org_settings(tenant_id=auth.tenant_id, org_id=org_id)
+    auth = require_authentication(request)
+    target_org_id = org_id or auth.org_id
+    if target_org_id:
+        resolved_org = studio_store.resolve_organization_identifier(
+            tenant_id=auth.tenant_id,
+            identifier=target_org_id,
+        )
+        if resolved_org is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "message": "Organization not found.",
+                    "details": {"reason_code": "STUDIO_ORG_NOT_FOUND"},
+                },
+            )
+        target_org_id = resolved_org["org_id"]
+        _enforce_org_scope(auth, target_org_id)
+        items = collaboration_store.list_personas(
+            tenant_id=auth.tenant_id,
+            org_id=target_org_id,
+            enabled_only=enabled_only,
+        )
+    else:
+        if not auth.is_global_admin:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Organization scope is required.",
+                    "details": {"reason_code": "ORG_SCOPE_REQUIRED"},
+                },
+            )
+        items = collaboration_store.list_personas_any_org(
+            tenant_id=auth.tenant_id,
+            enabled_only=enabled_only,
+        )
+    settings = studio_store.get_org_settings(tenant_id=auth.tenant_id, org_id=target_org_id or "")
     org_settings = settings.get("settings", {}) if isinstance(settings, dict) else {}
     allowed_providers = org_settings.get("ai_provider_allowlist", [])
     allowed = (
@@ -301,13 +619,28 @@ def list_personas(
     )
     filtered: list[dict[str, Any]] = []
     for item in items:
+        if not _can_access_persona(auth=auth, persona=item):
+            continue
         provider_id, _ = _persona_runtime_model_settings(item)
         if provider_id and not is_provider_configured(provider_id):
             continue
         if provider_id and allowed and provider_id not in allowed:
             continue
         filtered.append(item)
-    return ok_response(request, data={"items": filtered})
+    persona_chat_configuration = {
+        "response_types": ["conversation", "markdown", "summary", "reporting"],
+        "modes": ["single_best", "council", "summarized", "threaded", "silent_head"],
+        "prompt_template_kinds": [
+            "system_prompt",
+            "planner_prompt",
+            "tool_call_prompt",
+            "focus_group_prompt",
+            "tasking_prompt",
+            "reflection_prompt",
+        ],
+    }
+    enriched = [{**item, "chat_configuration": persona_chat_configuration} for item in filtered]
+    return ok_response(request, data={"items": enriched})
 
 
 @router.get("/personas/{persona_id}")
@@ -323,7 +656,35 @@ def get_persona(request: Request, persona_id: str) -> dict[str, Any]:
             },
         )
     _enforce_org_scope(auth, persona["org_id"])
-    return ok_response(request, data=persona)
+    if not _can_access_persona(auth=auth, persona=persona):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Persona access denied.",
+                "details": {"reason_code": "STUDIO_PERSONA_ACCESS_FORBIDDEN"},
+            },
+        )
+    provider_id, model_id = _persona_runtime_model_settings(persona)
+    return ok_response(
+        request,
+        data={
+            **persona,
+            "chat_configuration": {
+                "response_types": ["conversation", "markdown", "summary", "reporting"],
+                "modes": ["single_best", "council", "summarized", "threaded", "silent_head"],
+                "runtime_provider_id": provider_id or "",
+                "runtime_model_id": model_id or "",
+                "prompt_template_kinds": [
+                    "system_prompt",
+                    "planner_prompt",
+                    "tool_call_prompt",
+                    "focus_group_prompt",
+                    "tasking_prompt",
+                    "reflection_prompt",
+                ],
+            },
+        },
+    )
 
 
 @router.patch("/personas/{persona_id}")
@@ -868,6 +1229,21 @@ def patch_channel_policy(
 @router.post("/channels/{channel_id}/chat")
 def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPayload) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
+    normalized_controls = normalize_chat_controls(payload.model_dump())
+    if not bool(normalized_controls.get("accepted", False)):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Chat payload validation failed.",
+                "details": {
+                    "reason_code": "CHAT_PAYLOAD_VALIDATION_FAILED",
+                    "rejections": normalized_controls.get("rejections", []),
+                    "warnings": normalized_controls.get("warnings", []),
+                    "validation_summary": normalized_controls.get("validation_summary", {}),
+                },
+            },
+        )
+    normalized = normalized_controls.get("normalized", {}) if isinstance(normalized_controls.get("normalized"), dict) else {}
     channel = collaboration_store.get_channel(tenant_id=auth.tenant_id, channel_id=channel_id)
     if channel is None:
         raise HTTPException(
@@ -895,22 +1271,167 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
         tenant_id=auth.tenant_id,
         channel_id=channel_id,
         sender_user_id=auth.user_id,
-        content=payload.content,
-        metadata={"sender_kind": "user"},
+        content=str(normalized.get("content", payload.content)),
+        metadata={
+            "sender_kind": "user",
+            "structured_content": {
+                "version": "v1",
+                "blocks": normalized.get("content_blocks", []),
+            }
+            if normalized.get("content_blocks")
+            else {"version": "v1", "blocks": [{"type": "text", "text": str(normalized.get("content", payload.content))}]},
+        },
     )
 
-    persona_id = payload.persona_id or channel.get("default_persona_id")
+    explicit_calls = normalized.get("explicit_persona_calls", [])
+    explicit_first = explicit_calls[0] if isinstance(explicit_calls, list) and explicit_calls else None
+    requested_persona_id = explicit_first or normalized.get("persona_id")
+    persona_id = requested_persona_id or channel.get("default_persona_id")
     persona = None
     if persona_id:
         persona = collaboration_store.get_persona(tenant_id=auth.tenant_id, persona_id=persona_id)
         if persona is None or persona["org_id"] != channel["org_id"]:
+            if requested_persona_id:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "message": "Persona not found in organization.",
+                        "details": {"reason_code": "STUDIO_PERSONA_NOT_FOUND"},
+                    },
+                )
+            persona = None
+        if persona is not None and not _can_access_persona(auth=auth, persona=persona):
             raise HTTPException(
-                status_code=404,
+                status_code=403,
                 detail={
-                    "message": "Persona not found in organization.",
-                    "details": {"reason_code": "STUDIO_PERSONA_NOT_FOUND"},
+                    "message": "Persona access denied.",
+                    "details": {"reason_code": "STUDIO_PERSONA_ACCESS_FORBIDDEN"},
                 },
             )
+
+    if persona is None:
+        room_personas = collaboration_store.list_room_personas(tenant_id=auth.tenant_id, room_id=channel_id)
+        for room_persona in room_personas:
+            candidate_id = str(room_persona.get("persona_id", "")).strip()
+            if not candidate_id:
+                continue
+            candidate = collaboration_store.get_persona(tenant_id=auth.tenant_id, persona_id=candidate_id)
+            if candidate is None:
+                continue
+            if candidate.get("org_id") != channel["org_id"]:
+                continue
+            if not bool(candidate.get("enabled", True)):
+                continue
+            if not _can_access_persona(auth=auth, persona=candidate):
+                continue
+            persona = candidate
+            persona_id = candidate_id
+            break
+
+    image_prompt = _infer_image_prompt(str(normalized.get("content", payload.content)))
+    if image_prompt:
+        provider_id = "google"
+        model_id = "imagen-3.0-generate-002"
+        if isinstance(persona, dict):
+            runtime_provider, runtime_model = _persona_runtime_model_settings(persona)
+            if runtime_provider in {"google", "openai"}:
+                provider_id = runtime_provider
+            if runtime_model:
+                model_id = runtime_model
+
+        if bool(normalized.get("auto_execute_tools", payload.auto_execute_tools)):
+            output = generate_image_tool(
+                prompt=image_prompt,
+                provider_id=provider_id,
+                model_id=model_id,
+            )
+            execution = tool_execution_store.create_execution(
+                tenant_id=auth.tenant_id,
+                org_id=channel["org_id"],
+                tool_id="nano_banana",
+                provider_id=str(output.get("provider_id", provider_id)),
+                model_id=str(output.get("model_id", model_id)),
+                input_payload={"prompt": image_prompt},
+                output_payload=output,
+                created_by_user_id=auth.user_id,
+                status=str(output.get("status", "completed")),
+            )
+        else:
+            output = {
+                "provider_id": provider_id,
+                "model_id": model_id,
+                "mime_type": "image/png",
+                "status": "recommended",
+                "note": "Tool call was recommended but not executed.",
+            }
+            execution = {"execution_id": "", "provider_id": provider_id, "model_id": model_id}
+        attachments = [
+            {
+                "type": "image",
+                "mime_type": str(output.get("mime_type", "image/png")),
+                "asset_url": str(output.get("asset_url", "")),
+                "image_base64": str(output.get("image_base64", "")),
+                "status": str(output.get("status", "")),
+            }
+        ]
+        assistant_message = collaboration_store.create_channel_message(
+            tenant_id=auth.tenant_id,
+            channel_id=channel_id,
+            sender_user_id=auth.user_id,
+            content=(
+                "Generated image from prompt."
+                if bool(normalized.get("auto_execute_tools", payload.auto_execute_tools))
+                else "Image recommendation prepared."
+            ),
+            metadata={
+                "sender_kind": "assistant",
+                "mode": str(normalized.get("mode", payload.mode)),
+                "response_type": str(normalized.get("response_type", payload.response_type)),
+                "tool_call": {
+                    "tool_id": "nano_banana",
+                    "execution_id": execution.get("execution_id"),
+                    "provider": execution.get("provider_id"),
+                    "model": execution.get("model_id"),
+                },
+                "attachments": attachments,
+                "structured_content": _build_structured_content(
+                    text=("Generated image from prompt." if bool(normalized.get("auto_execute_tools", payload.auto_execute_tools)) else "Image recommendation prepared."),
+                    response_type=str(normalized.get("response_type", payload.response_type)),
+                    attachments=attachments,
+                ),
+                "tool_recommendations": [
+                    {
+                        "tool_id": "nano_banana",
+                        "capability": "image_generation",
+                        "recommended": True,
+                        "reason": "image_intent_detected",
+                    }
+                ],
+            },
+        )
+        return ok_response(
+            request,
+            data={
+                "user_message": user_message,
+                "assistant_message": assistant_message,
+                "chat_options": _build_chat_options(
+                    tenant_id=auth.tenant_id,
+                    org_id=channel["org_id"],
+                    channel_id=channel_id,
+                    selected_persona_id=persona.get("persona_id") if isinstance(persona, dict) else None,
+                ),
+                "requested_controls": {
+                    "response_type": str(normalized.get("response_type", payload.response_type)),
+                    "persona_overrides": normalized.get("participant_controls", {}),
+                    "auto_execute_tools": bool(normalized.get("auto_execute_tools", payload.auto_execute_tools)),
+                },
+                "validation": {
+                    "warnings": normalized_controls.get("warnings", []),
+                    "rejections": normalized_controls.get("rejections", []),
+                    "summary": normalized_controls.get("validation_summary", {}),
+                },
+            },
+        )
 
     messages = collaboration_store.build_conversation_messages(
         tenant_id=auth.tenant_id,
@@ -935,14 +1456,43 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
     model_override = None
     if persona is not None:
         _enforce_persona_policy(tenant_id=auth.tenant_id, org_id=channel["org_id"], persona=persona)
-        system_prompt = compile_persona_system_prompt_resolved(
+        base_system_prompt = compile_persona_system_prompt_resolved(
             tenant_id=auth.tenant_id,
             persona=persona,
             org_id=channel["org_id"],
             team_id=str(channel.get("team_id", "") or ""),
         )
+        runtime_provider_id, _ = _persona_runtime_model_settings(persona)
+        tool_call_extension = resolve_rendered_prompt_template(
+            tenant_id=auth.tenant_id,
+            provider_id=runtime_provider_id or "openai",
+            template_kind="tool_call_prompt",
+            scopes={
+                "team": str(channel.get("team_id", "") or ""),
+                "division": "",
+                "org": channel["org_id"],
+                "tenant": auth.tenant_id,
+            },
+            context={
+                "persona": {
+                    "name": persona.get("name", ""),
+                    "role": persona.get("role", ""),
+                    "scope": persona.get("scope", "organization"),
+                },
+                "request": {
+                    "message": str(normalized.get("content", payload.content)),
+                    "mode": str(normalized.get("mode", payload.mode)),
+                },
+            },
+        )
+        system_prompt = _append_prompt(base_system_prompt, tool_call_extension)
         model_profile = persona.get("model_profile", "reasoning-optimized")
         provider_override, model_override = _persona_runtime_model_settings(persona)
+
+    system_prompt = _append_prompt(
+        system_prompt,
+        _response_type_instruction(str(normalized.get("response_type", payload.response_type))),
+    )
 
     try:
         result = model_gateway.generate_text_sync(
@@ -1014,7 +1564,8 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
                         "model": result.model,
                         "usage": result.usage,
                         "persona_id": persona.get("persona_id") if persona else None,
-                        "mode": payload.mode,
+                        "mode": str(normalized.get("mode", payload.mode)),
+                        "response_type": str(normalized.get("response_type", payload.response_type)),
                         "fallback_approval_request_id": consumed_approval["request_id"],
                         "context_window": {
                             "raw_token_estimate": context_result.raw_token_estimate,
@@ -1024,6 +1575,10 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
                             "compaction_level": compaction_level,
                             "compaction_disabled": compaction_disabled,
                         },
+                        "structured_content": _build_structured_content(
+                            text=result.content,
+                            response_type=str(normalized.get("response_type", payload.response_type)),
+                        ),
                     },
                 )
                 return ok_response(
@@ -1031,6 +1586,22 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
                     data={
                         "user_message": user_message,
                         "assistant_message": assistant_message,
+                        "chat_options": _build_chat_options(
+                            tenant_id=auth.tenant_id,
+                            org_id=channel["org_id"],
+                            channel_id=channel_id,
+                            selected_persona_id=persona.get("persona_id") if isinstance(persona, dict) else None,
+                        ),
+                        "requested_controls": {
+                            "response_type": str(normalized.get("response_type", payload.response_type)),
+                            "persona_overrides": normalized.get("participant_controls", {}),
+                            "auto_execute_tools": bool(normalized.get("auto_execute_tools", payload.auto_execute_tools)),
+                        },
+                        "validation": {
+                            "warnings": normalized_controls.get("warnings", []),
+                            "rejections": normalized_controls.get("rejections", []),
+                            "summary": normalized_controls.get("validation_summary", {}),
+                        },
                     },
                 )
 
@@ -1047,7 +1618,7 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
                 trigger_reason="chat_generation_error",
                 created_by_user_id=auth.user_id,
                 metadata={
-                    "mode": payload.mode,
+                    "mode": str(normalized.get("mode", payload.mode)),
                     "error": str(error),
                 },
             )
@@ -1093,7 +1664,8 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
             "model": result.model,
             "usage": result.usage,
             "persona_id": persona.get("persona_id") if persona else None,
-            "mode": payload.mode,
+            "mode": str(normalized.get("mode", payload.mode)),
+            "response_type": str(normalized.get("response_type", payload.response_type)),
             "context_window": {
                 "raw_token_estimate": context_result.raw_token_estimate,
                 "compacted_token_estimate": context_result.compacted_token_estimate,
@@ -1102,6 +1674,10 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
                 "compaction_level": compaction_level,
                 "compaction_disabled": compaction_disabled,
             },
+            "structured_content": _build_structured_content(
+                text=result.content,
+                response_type=str(normalized.get("response_type", payload.response_type)),
+            ),
         },
     )
 
@@ -1110,5 +1686,21 @@ def chat_in_channel(request: Request, channel_id: str, payload: ChannelChatPaylo
         data={
             "user_message": user_message,
             "assistant_message": assistant_message,
+            "chat_options": _build_chat_options(
+                tenant_id=auth.tenant_id,
+                org_id=channel["org_id"],
+                channel_id=channel_id,
+                selected_persona_id=persona.get("persona_id") if isinstance(persona, dict) else None,
+            ),
+            "requested_controls": {
+                "response_type": str(normalized.get("response_type", payload.response_type)),
+                "persona_overrides": normalized.get("participant_controls", {}),
+                "auto_execute_tools": bool(normalized.get("auto_execute_tools", payload.auto_execute_tools)),
+            },
+            "validation": {
+                "warnings": normalized_controls.get("warnings", []),
+                "rejections": normalized_controls.get("rejections", []),
+                "summary": normalized_controls.get("validation_summary", {}),
+            },
         },
     )

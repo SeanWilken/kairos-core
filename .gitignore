@@ -27,8 +27,7 @@ coverage/
 *.log
 tmp/
 
-!kairos-stack/
-kairos-stack/*
+myai-suite/*
 labs/
 internal/
 !internal/

@@ -1,4 +1,4 @@
-# Kairos Core API Draft (OpenAPI-First)
+# MyAI Core API Draft (OpenAPI-First)
 
 Scope: bootstrap + global admin/auth + org hierarchy + personas + knowledge/vector + RBAC + API keys + usage.
 
@@ -137,7 +137,7 @@ Once explicit bootstrap/auth endpoints are implemented, migrate to:
 Wizard state should stay typed and separate from UI presentation primitives.
 
 - Keep process state/types in core frontend (reference: `frontend/src/app/components/wizard/types.ts`)
-- Keep `@kairosstack/ui` wizard components generic/presentational
+- Keep `@myai-tech/myui` wizard components generic/presentational
 - Add onboarding-specific typed state for:
   - global admin payload and result
   - organization payload and result

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CheckCircle2, Download, Loader2, Terminal } from "lucide-react";
-import { Button, cn } from "@kairosstack/ui";
+import { Button, cn } from "@myai-tech/myui";
 
 import { buildArtifacts } from "../helpers";
 import type { StepProps } from "../types";

@@ -1,8 +1,8 @@
-# Kairos Core Charter
+# MyAI Core Charter
 
 ## Why this repo exists
 
-Kairos Core exists to make private, practical AI setup easier for individuals and organizations.
+MyAI Core exists to make private, practical AI setup easier for individuals and organizations.
 The core output is not a single UI; it is a reliable backend runtime and contract surface that other tools can build on.
 
 ## What this repo is responsible for

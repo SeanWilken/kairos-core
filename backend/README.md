@@ -35,8 +35,8 @@ uvicorn app.main:app --reload --port 8000
 Docker build/run:
 
 ```powershell
-docker build -t kairos/core-api:local -f Dockerfile .
-docker run --rm -p 8000:8000 --env-file .env kairos/core-api:local
+docker build -t myai/core-api:local -f Dockerfile .
+docker run --rm -p 8000:8000 --env-file .env myai/core-api:local
 ```
 
 Apply SQL migrations (repo-root `migrations/` is source of truth):

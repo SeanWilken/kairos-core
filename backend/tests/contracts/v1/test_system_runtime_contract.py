@@ -18,7 +18,7 @@ def _create_session(client: TestClient) -> str:
         headers=HEADERS,
         json={
             "runtime": {
-                "tenant_name": "kairos-dev",
+                "tenant_name": "myai-dev",
                 "connections": [
                     {
                         "id": "1",
@@ -85,6 +85,9 @@ def test_system_ai_provider_catalog_contract() -> None:
     assert body["error"] is None
     assert isinstance(body["data"]["providers"], list)
     assert isinstance(body["data"]["routing"], dict)
+    openai = next((item for item in body["data"]["providers"] if item.get("provider_id") == "openai"), None)
+    assert isinstance(openai, dict)
+    assert isinstance(openai.get("response_controls", {}).get("effort_levels", []), list)
 
 
 def test_system_ai_provider_models_contract() -> None:
@@ -102,6 +105,7 @@ def test_system_ai_provider_models_contract() -> None:
     assert body["data"]["provider_id"] == "google"
     assert body["data"]["capability"] == "image_generation"
     assert isinstance(body["data"]["models"], list)
+    assert isinstance(body["data"].get("response_controls", {}).get("response_types", []), list)
 
 
 def test_system_audit_events_contract() -> None:
@@ -251,6 +255,114 @@ def test_prompt_template_version_activation_and_resolution_contract() -> None:
         headers=auth_headers,
     )
     assert rollback_response.status_code == 200
+
+
+def test_prompt_template_capabilities_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    response = client.get("/v1/system/prompt-templates/capabilities", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] is None
+    data = body["data"]
+    assert isinstance(data.get("providers"), list)
+    assert "system_prompt" in data.get("runtime_supported_template_kinds", [])
+    assert "system_prompt" in data.get("editable_template_kinds", [])
+    assert "planner_prompt" in data.get("editable_template_kinds", [])
+    assert "focus_group_prompt" in data.get("editable_template_kinds", [])
+    assert "tasking_prompt" in data.get("editable_template_kinds", [])
+    assert "org" in data.get("scope_levels", [])
+
+
+def test_prompt_template_render_preview_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    version_response = client.post(
+        "/v1/system/prompt-templates/versions",
+        headers=auth_headers,
+        json={
+            "provider_id": "openai",
+            "template_kind": "planner_prompt",
+            "name": "default",
+            "content": "Plan task for {{persona.name}}: {{request.message}}",
+        },
+    )
+    assert version_response.status_code == 200
+    version = version_response.json()["data"]
+
+    activation_response = client.post(
+        "/v1/system/prompt-templates/activations",
+        headers=auth_headers,
+        json={
+            "scope_level": "org",
+            "scope_id": "org0",
+            "provider_id": "openai",
+            "template_kind": "planner_prompt",
+            "template_version_id": version["template_version_id"],
+            "reason": "preview",
+        },
+    )
+    assert activation_response.status_code == 200
+
+    preview = client.post(
+        "/v1/system/prompt-templates/render-preview",
+        headers=auth_headers,
+        json={
+            "provider_id": "openai",
+            "template_kind": "planner_prompt",
+            "org_id": "org0",
+            "context": {
+                "persona": {"name": "Planner"},
+                "request": {"message": "Break this into tasks"},
+            },
+        },
+    )
+    assert preview.status_code == 200
+    rendered = preview.json()["data"]["rendered"]
+    assert "Plan task for Planner" in rendered
+
+
+def test_prompt_template_google_resolution_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    version_response = client.post(
+        "/v1/system/prompt-templates/versions",
+        headers=auth_headers,
+        json={
+            "provider_id": "google",
+            "template_kind": "tool_call_prompt",
+            "name": "default",
+            "content": "Use tools carefully for {{persona.name}} on {{request.message}}",
+        },
+    )
+    assert version_response.status_code == 200
+    version = version_response.json()["data"]
+
+    activate_response = client.post(
+        "/v1/system/prompt-templates/activations",
+        headers=auth_headers,
+        json={
+            "scope_level": "org",
+            "scope_id": "org0",
+            "provider_id": "google",
+            "template_kind": "tool_call_prompt",
+            "template_version_id": version["template_version_id"],
+            "reason": "google tool prompt",
+        },
+    )
+    assert activate_response.status_code == 200
+
+    resolve = client.get(
+        "/v1/system/prompt-templates/resolve",
+        headers=auth_headers,
+        params={"provider_id": "google", "template_kind": "tool_call_prompt", "org_id": "org0"},
+    )
+    assert resolve.status_code == 200
+    resolved = resolve.json()["data"]
+    assert resolved["version"]["template_version_id"] == version["template_version_id"]
 
 
 def test_model_gateway_policy_management_contract() -> None:

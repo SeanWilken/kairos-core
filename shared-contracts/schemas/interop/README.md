@@ -31,3 +31,7 @@ Onboarding + Studio draft schemas (v0.2):
 - `v0.2/studio-workflow-definition.schema.json`
 - `v0.2/studio-environment-promotion.schema.json`
 - `v0.2/onboarding-contract-catalog.schema.json`
+
+Instruction resolution draft contracts:
+
+- `instruction-resolution-v0.1.md`

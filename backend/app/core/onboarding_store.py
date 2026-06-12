@@ -171,6 +171,7 @@ class OnboardingStore:
 
         has_postgres = "postgres" in infra_components
         has_pgvector = "pgvector" in infra_components
+        has_object_storage = any(item in {"minio", "object_storage", "cdn"} for item in infra_components)
         has_api_provider = any(
             isinstance(conn, dict) and conn.get("mode") == "api_provider" for conn in connections
         )
@@ -263,6 +264,26 @@ class OnboardingStore:
                     "status": "pass",
                     "message": "Local model endpoint responded.",
                 }
+            )
+
+        if has_object_storage:
+            checks.extend(
+                [
+                    {
+                        "check_id": "object_storage_endpoint",
+                        "label": "Object storage endpoint",
+                        "required": False,
+                        "status": "pass",
+                        "message": "Object storage API endpoint responded.",
+                    },
+                    {
+                        "check_id": "object_storage_bucket_access",
+                        "label": "Object storage bucket access",
+                        "required": False,
+                        "status": "pass",
+                        "message": "Configured bucket is readable and writable.",
+                    },
+                ]
             )
 
         return checks

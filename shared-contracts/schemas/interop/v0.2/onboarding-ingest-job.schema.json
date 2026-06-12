@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kairos.dev/schemas/interop/v0.2/onboarding-ingest-job.schema.json",
+  "$id": "https://myai.dev/schemas/interop/v0.2/onboarding-ingest-job.schema.json",
   "title": "OnboardingIngestJob",
   "type": "object",
   "additionalProperties": false,

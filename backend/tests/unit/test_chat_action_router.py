@@ -34,3 +34,15 @@ def test_resolve_chat_action_general_message_defaults() -> None:
     assert decision.action_type == "general"
     assert decision.resolved_mode is None
     assert decision.resolved_persona_id is None
+
+
+def test_resolve_chat_action_role_call_routes_to_threaded() -> None:
+    decision = resolve_chat_action(
+        content="role call for participating personas",
+        requested_mode="single_best",
+        handle_to_persona_id={},
+        room_persona_count=2,
+    )
+    assert decision.action_type == "attendance"
+    assert decision.resolved_mode == "threaded"
+    assert decision.reason == "persona_roll_call"

@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCheck, ShieldCheck } from "lucide-react";
-import { Button, cn } from "@kairosstack/ui";
+import { Button, cn } from "@myai-tech/myui";
 
 import { buildPreflightChecks } from "../helpers";
 import type { WizardState } from "../types";

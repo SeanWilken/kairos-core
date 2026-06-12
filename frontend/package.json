@@ -1,5 +1,5 @@
 {
-  "name": "kairos-core-frontend",
+  "name": "myai-core-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@kairosstack/ui": "^0.1.3-alpha.1",
+    "@myai-tech/myui": "^0.1.3-alpha.9",
     "@tanstack/react-query": "^5.51.0",
     "lucide-react": "^0.539.0",
     "react": "^18.3.1",

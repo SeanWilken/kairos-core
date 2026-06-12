@@ -4,8 +4,8 @@ This draft defines the contract surface for the initial onboarding lifecycle and
 
 ## Scope and ownership
 
-- `kairos-core`: bootstrap session lifecycle, runtime checks, artifact generation, ingest jobs, runtime handoff.
-- `kairos-studio`: organization/persona/tool/workflow configuration and promotion workflows.
+- `myai-core`: bootstrap session lifecycle, runtime checks, artifact generation, ingest jobs, runtime handoff.
+- `myai-studio`: organization/persona/tool/workflow configuration and promotion workflows.
 - `shared-contracts`: source of truth schemas and endpoint shape references.
 
 ## Contract set (draft)
@@ -105,8 +105,8 @@ Generated local files should include defaults unless overridden:
 
 - `POSTGRES_HOST=localhost`
 - `POSTGRES_PORT=5432`
-- `POSTGRES_DB=kairos`
-- `POSTGRES_USER=kairos`
+- `POSTGRES_DB=myai`
+- `POSTGRES_USER=myai`
 - `OPENAI_BASE_URL=https://api.openai.com/v1`
 - `OPENAI_MODEL=gpt-4o-mini`
 

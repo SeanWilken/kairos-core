@@ -65,7 +65,80 @@ def _normalize_key(value: str) -> str:
     return re.sub(r"\s+", " ", normalized)
 
 
+def _slugify_option_key(value: str) -> str:
+    lowered = re.sub(r"[^a-zA-Z0-9]+", "-", str(value or "").strip().lower())
+    normalized = re.sub(r"-+", "-", lowered).strip("-")
+    return normalized or "value"
+
+
 class PromptCatalogStore:
+    def _ensure_selected_options_taxonomy(self, *, db, tenant_id: str, extracted: dict[str, Any], now: datetime) -> None:
+        selected_options = extracted.get("selected_options", {})
+        if not isinstance(selected_options, dict) or not selected_options:
+            return
+
+        for category_name, raw_value in selected_options.items():
+            name = str(category_name or "").strip()
+            if not name:
+                continue
+
+            category = db.scalar(
+                select(PersonaTemplateCategoryModel).where(
+                    PersonaTemplateCategoryModel.tenant_id == tenant_id,
+                    PersonaTemplateCategoryModel.name == name,
+                )
+            )
+            if category is None:
+                category = PersonaTemplateCategoryModel(
+                    category_id=str(uuid4()),
+                    tenant_id=tenant_id,
+                    name=name,
+                    display_name=name.replace("_", " ").title(),
+                    description="Auto-created from persona import.",
+                    sort_order=0,
+                    is_active=True,
+                    created_at=now,
+                    updated_at=now,
+                )
+                db.add(category)
+                db.flush()
+
+            values: list[str] = []
+            if isinstance(raw_value, list):
+                values = [str(item).strip() for item in raw_value if str(item).strip()]
+            else:
+                single = str(raw_value or "").strip()
+                if single:
+                    values = [single]
+
+            for value in values:
+                option_key = _slugify_option_key(value)
+                existing = db.scalar(
+                    select(PersonaTemplateOptionModel).where(
+                        PersonaTemplateOptionModel.category_id == category.category_id,
+                        PersonaTemplateOptionModel.key == option_key,
+                    )
+                )
+                if existing is None:
+                    existing = PersonaTemplateOptionModel(
+                        option_id=str(uuid4()),
+                        tenant_id=tenant_id,
+                        category_id=category.category_id,
+                        key=option_key,
+                        label=value,
+                        verbose_statement=f"Auto-created option for {name}.",
+                        provider_compatibility_json=json.dumps(["openai", "google", "anthropic"]),
+                        sort_order=0,
+                        is_active=True,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                else:
+                    existing.label = value
+                    existing.is_active = True
+                    existing.updated_at = now
+                db.add(existing)
+
     def _to_category_dict(self, model: PersonaTemplateCategoryModel) -> dict[str, Any]:
         return {
             "category_id": model.category_id,
@@ -1149,6 +1222,13 @@ class PromptCatalogStore:
             now = datetime.now(timezone.utc)
             extracted = _load_json_dict(queue.extracted_config_json)
             pack_data = _load_json_dict(queue.pack_data_json)
+
+            self._ensure_selected_options_taxonomy(
+                db=db,
+                tenant_id=tenant_id,
+                extracted=extracted,
+                now=now,
+            )
 
             system_prompt = self._generate_prompt_from_extracted(extracted)
             org_id = str(extracted.get("org_id", "")).strip()

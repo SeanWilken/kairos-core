@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 
 from app.core.security import decode_jwt
+from app.core.studio_store import studio_store
 from app.core.tenant_policy import require_existing_tenant, validate_tenant_scope
 
 
@@ -98,6 +99,31 @@ def require_authentication(request: Request, *, require_org: bool = False) -> Au
         org_header = request.headers.get("X-Org-ID")
         if org_header:
             context.org_id = org_header
+
+    if not context.org_id and not context.is_global_admin:
+        org_header = request.headers.get("X-Org-ID")
+        if org_header:
+            context.org_id = org_header
+        else:
+            memberships = studio_store.list_user_memberships(
+                tenant_id=context.tenant_id,
+                user_id=context.user_id,
+            )
+            active_org_ids = []
+            inferred_roles: list[str] = []
+            for membership in memberships:
+                if str(membership.get("status", "")).strip().lower() != "active":
+                    continue
+                org_id = str(membership.get("org_id", "")).strip()
+                if org_id and org_id not in active_org_ids:
+                    active_org_ids.append(org_id)
+                role = str(membership.get("role", "")).strip()
+                if role and role not in inferred_roles:
+                    inferred_roles.append(role)
+            if len(active_org_ids) == 1:
+                context.org_id = active_org_ids[0]
+                if not context.roles and inferred_roles:
+                    context.roles = inferred_roles
 
     if require_org and not context.org_id and not context.is_global_admin:
         raise HTTPException(

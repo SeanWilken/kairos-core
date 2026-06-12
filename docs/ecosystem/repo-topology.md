@@ -7,15 +7,15 @@ Allow external repositories to consume stable interop contracts.
 
 ## Recommended repos
 
-1. `kairos-core` (this repo)
+1. `myai-core` (this repo)
    - backend + reference frontend + infra + contracts
-2. `kairos-sdk`
+2. `myai-sdk`
    - SDKs, plugin manifest validators, sample plugins
-3. `kairos-ui-adapters`
+3. `myai-ui-adapters`
    - alternate frontends (web variants, IDE extensions)
-4. `kairos-integrations`
+4. `myai-integrations`
    - embeddings into existing products (chatbot/FAQ adapters, enterprise connectors)
-5. `kairos-artifact-publish`
+5. `myai-artifact-publish`
    - Hugging Face export/publish and local artifact tooling
 
 Note: this repository currently focuses on the core only. External repos are design targets and are intentionally not implemented here yet.

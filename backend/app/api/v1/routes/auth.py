@@ -5,10 +5,13 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from app.core.auth_context import require_authentication
 from app.core.auth_store import auth_store
 from app.core.config import get_settings
+from app.core.db import SessionLocal
+from app.core.db_models import TenantModel
 from app.core.response import ok_response
 from app.core.security import (
     decode_jwt,
@@ -46,11 +49,25 @@ class RefreshPayload(BaseModel):
     refresh_token: str = Field(min_length=20)
 
 
+class ContextSwitchPayload(BaseModel):
+    org_id: str = Field(min_length=1)
+
+
 def _resolve_tenant(request: Request, payload_tenant: str | None) -> str:
     if payload_tenant:
         tenant_id = payload_tenant
     else:
         tenant_id = request.headers.get("X-Tenant-ID") or ""
+
+    if not tenant_id:
+        settings = get_settings()
+        if settings.single_tenant_mode and settings.install_tenant_id:
+            tenant_id = settings.install_tenant_id
+        elif settings.single_tenant_mode:
+            with SessionLocal() as db:
+                rows = db.scalars(select(TenantModel).order_by(TenantModel.created_at.asc()).limit(2)).all()
+                if len(rows) == 1:
+                    tenant_id = rows[0].tenant_id
 
     if not tenant_id:
         raise HTTPException(
@@ -112,15 +129,6 @@ def register(request: Request, payload: RegisterPayload) -> dict[str, Any]:
     if not payload.is_global_admin and not org_id:
         org_header = request.headers.get("X-Org-ID")
         org_id = org_header or None
-    if not payload.is_global_admin and not org_id:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "message": "Organization context is required for non-global users.",
-                "details": {"reason_code": "STUDIO_ORG_REQUIRED_FOR_USER", "field": "org_id"},
-            },
-        )
-
     if org_id:
         org = studio_store.get_organization(tenant_id=tenant_id, org_id=org_id)
         if org is None:
@@ -207,15 +215,6 @@ def login(request: Request, payload: LoginPayload) -> dict[str, Any]:
     elif memberships:
         selected_org_id = memberships[0]["org_id"]
         selected_role = memberships[0]["role"]
-
-    if not selected_org_id and not user.get("is_global_admin", False):
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "message": "Organization membership is required.",
-                "details": {"reason_code": "AUTH_ORG_MEMBERSHIP_REQUIRED"},
-            },
-        )
 
     roles = [selected_role] if selected_role else []
     if user.get("is_global_admin", False):
@@ -351,6 +350,37 @@ def me(request: Request) -> dict[str, Any]:
         tenant_id=context.tenant_id,
         user_id=context.user_id,
     )
+    organizations = studio_store.list_organizations(tenant_id=context.tenant_id)
+    org_map = {item["org_id"]: item for item in organizations}
+    org_options = []
+    seen_org_ids: set[str] = set()
+    for membership in memberships:
+        org = org_map.get(membership["org_id"])
+        if org is None:
+            continue
+        seen_org_ids.add(org["org_id"])
+        org_options.append(
+            {
+                "org_id": org["org_id"],
+                "name": org["name"],
+                "slug": org["slug"],
+                "role": membership.get("role", "member"),
+            }
+        )
+
+    if context.is_global_admin:
+        for org in organizations:
+            org_id = str(org.get("org_id", "")).strip()
+            if not org_id or org_id in seen_org_ids:
+                continue
+            org_options.append(
+                {
+                    "org_id": org_id,
+                    "name": org.get("name", ""),
+                    "slug": org.get("slug", ""),
+                    "role": "global_admin",
+                }
+            )
     return ok_response(
         request,
         data={
@@ -362,5 +392,67 @@ def me(request: Request) -> dict[str, Any]:
                 "is_global_admin": context.is_global_admin,
             },
             "memberships": memberships,
+            "org_options": org_options,
+        },
+    )
+
+
+@router.post("/context/switch")
+def switch_context(request: Request, payload: ContextSwitchPayload) -> dict[str, Any]:
+    context = require_authentication(request)
+    user = studio_store.get_user(tenant_id=context.tenant_id, user_id=context.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "User not found.",
+                "details": {"reason_code": "STUDIO_USER_NOT_FOUND"},
+            },
+        )
+
+    resolved_org = studio_store.resolve_organization_identifier(
+        tenant_id=context.tenant_id,
+        identifier=payload.org_id,
+    )
+    if resolved_org is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "Organization not found.",
+                "details": {"reason_code": "STUDIO_ORG_NOT_FOUND"},
+            },
+        )
+
+    memberships = studio_store.list_user_memberships(
+        tenant_id=context.tenant_id,
+        user_id=context.user_id,
+    )
+    membership = next((item for item in memberships if item["org_id"] == resolved_org["org_id"]), None)
+    if membership is None and not context.is_global_admin:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "User is not a member of this organization.",
+                "details": {"reason_code": "AUTH_ORG_MEMBERSHIP_REQUIRED"},
+            },
+        )
+
+    roles = [membership["role"]] if membership else []
+    if bool(user.get("is_global_admin", False)):
+        roles.append("global_admin")
+    tokens = _token_pair_for_user(
+        user=user,
+        org_id=resolved_org["org_id"],
+        roles=roles,
+    )
+    return ok_response(
+        request,
+        data={
+            "org": {
+                "org_id": resolved_org["org_id"],
+                "name": resolved_org["name"],
+                "slug": resolved_org["slug"],
+            },
+            **tokens,
         },
     )

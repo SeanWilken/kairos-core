@@ -11,7 +11,7 @@ def test_studio_organization_create_list_get_contract() -> None:
     create = client.post(
         "/v1/studio/organizations",
         headers=headers,
-        json={"name": "Kairos Team", "slug": "kairos-team", "mode": "team"},
+        json={"name": "MyAI Team", "slug": "myai-team", "mode": "team"},
     )
     assert create.status_code == 200
     create_body = create.json()
@@ -28,7 +28,7 @@ def test_studio_organization_create_list_get_contract() -> None:
     assert fetched.status_code == 200
     fetched_body = fetched.json()
     assert fetched_body["error"] is None
-    assert fetched_body["data"]["slug"] == "kairos-team"
+    assert fetched_body["data"]["slug"] == "myai-team"
 
 
 def test_studio_organization_not_found_contract() -> None:

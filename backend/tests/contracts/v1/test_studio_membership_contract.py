@@ -20,7 +20,7 @@ def test_studio_membership_create_and_patch_role_contract() -> None:
         "/v1/studio/users",
         headers=headers,
         json={
-            "email": "global.owner@kairos.dev",
+            "email": "global.owner@myai.dev",
             "first_name": "Global",
             "last_name": "Owner",
             "is_global_admin": True,
