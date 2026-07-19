@@ -47,6 +47,26 @@ export class CoreApiError extends Error {
 
 export type CoreApiClient = ReturnType<typeof createCoreApiClient>;
 
+export const CORE_ACCESS_TOKEN_KEY = "myai.core.access_token";
+export const CORE_REFRESH_TOKEN_KEY = "myai.core.refresh_token";
+
+export function getStoredAccessToken(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.localStorage.getItem(CORE_ACCESS_TOKEN_KEY) || undefined;
+}
+
+export function storeCoreTokens(tokens: { access_token?: string; refresh_token?: string }): void {
+  if (typeof window === "undefined") return;
+  if (tokens.access_token) window.localStorage.setItem(CORE_ACCESS_TOKEN_KEY, tokens.access_token);
+  if (tokens.refresh_token) window.localStorage.setItem(CORE_REFRESH_TOKEN_KEY, tokens.refresh_token);
+}
+
+export function clearCoreTokens(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(CORE_ACCESS_TOKEN_KEY);
+  window.localStorage.removeItem(CORE_REFRESH_TOKEN_KEY);
+}
+
 type RuntimeConfig = {
   tenantId?: string;
   coreApiBaseUrl?: string;
@@ -79,7 +99,7 @@ export function createCoreApiClient(config?: {
 }) {
   const baseUrl = (config?.baseUrl ?? getDefaultCoreApiBaseUrl()).replace(/\/$/, "");
   const scope = config?.scope ?? {};
-  const accessToken = config?.accessToken;
+  const accessToken = config?.accessToken ?? getStoredAccessToken();
   const defaultHeaders = config?.defaultHeaders ?? {};
 
   const buildUrl = (path: string, query?: Record<string, QueryValue>) => {

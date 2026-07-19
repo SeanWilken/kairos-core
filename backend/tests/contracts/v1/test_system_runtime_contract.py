@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from app.main import app
 from app.core.fallback_store import fallback_store
@@ -106,6 +107,154 @@ def test_system_ai_provider_models_contract() -> None:
     assert body["data"]["capability"] == "image_generation"
     assert isinstance(body["data"]["models"], list)
     assert isinstance(body["data"].get("response_controls", {}).get("response_types", []), list)
+
+
+def test_system_direct_provider_chat_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    class _Result:
+        def __init__(self) -> None:
+            self.content = "Hello from direct provider"
+            self.provider = "openai"
+            self.model = "gpt-4o-mini"
+            self.usage = {"prompt_tokens": 10, "completion_tokens": 12, "total_tokens": 22}
+
+    with patch("app.api.v1.routes.system.model_gateway.generate_text", return_value=_Result()):
+        response = client.post(
+            "/v1/system/ai/direct-chat",
+            headers=auth_headers,
+            json={
+                "provider_id": "openai",
+                "model_id": "gpt-4o-mini",
+                "system_prompt": "You are concise.",
+                "messages": [{"role": "user", "content": "hi"}],
+                "model_profile": "balanced",
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] is None
+    assert body["data"]["provider_id"] == "openai"
+    assert body["data"]["model_id"] == "gpt-4o-mini"
+    assert body["data"]["content"] == "Hello from direct provider"
+
+
+def test_system_direct_provider_chat_profile_preference_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    class _Result:
+        def __init__(self) -> None:
+            self.content = "Profile-directed provider response"
+            self.provider = "anthropic"
+            self.model = "claude-sonnet-4-20250514"
+            self.usage = {"prompt_tokens": 10, "completion_tokens": 12, "total_tokens": 22}
+
+    with patch("app.api.v1.routes.system.model_gateway.generate_text", return_value=_Result()):
+        response = client.post(
+            "/v1/system/ai/direct-chat",
+            headers=auth_headers,
+            json={
+                "profile_id": "document-drafter",
+                "system_prompt": "You are concise.",
+                "messages": [{"role": "user", "content": "hi"}],
+                "model_profile": "balanced",
+            },
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] is None
+    assert body["data"]["profile_id"] == "document-drafter"
+    assert body["data"]["provider_id"] == "anthropic"
+
+
+def test_system_voice_status_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    with patch(
+        "app.api.v1.routes.system.get_voice_runtime_status",
+        return_value={
+            "stt": {"provider": "whisper_cpp", "configured": True, "language_default": "en", "model": "base"},
+            "tts": {"provider": "piper", "configured": True, "voice_default": "amy", "model": "amy.onnx", "format_default": "wav"},
+        },
+    ):
+        response = client.get("/v1/system/voice/status", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] is None
+    assert body["data"]["stt"]["provider"] == "whisper_cpp"
+    assert body["data"]["tts"]["provider"] == "piper"
+
+
+def test_system_voice_stt_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    with patch(
+        "app.api.v1.routes.system.transcribe_audio",
+        return_value={"text": "hello from stt", "provider": "whisper_cpp", "language": "en", "segments": [], "raw": {}},
+    ):
+        response = client.post(
+            "/v1/system/voice/stt",
+            headers=auth_headers,
+            data={"language": "en"},
+            files={"file": ("sample.wav", b"RIFF....", "audio/wav")},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] is None
+    assert body["data"]["text"] == "hello from stt"
+
+
+def test_system_voice_stt_persist_to_knowledge_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    with patch(
+        "app.api.v1.routes.system.transcribe_audio",
+        return_value={"text": "meeting notes transcript", "provider": "whisper_cpp", "language": "en", "segments": [], "raw": {}},
+    ):
+        response = client.post(
+            "/v1/system/voice/stt",
+            headers=auth_headers,
+            data={
+                "language": "en",
+                "persist_to_knowledge": "true",
+                "org_id": "org0",
+                "title": "Voice Transcript Note",
+                "summary": "Transcript summary",
+                "tags_json": '["voice","notes"]',
+                "visibility_json": '{"scope":"org","acl_policy_id":"policy-org"}',
+            },
+            files={"file": ("meeting.wav", b"RIFF....", "audio/wav")},
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["error"] is None
+    assert body["data"]["text"] == "meeting notes transcript"
+    assert body["data"]["knowledge_entity"]["kind"] == "knowledge_node"
+    assert body["data"]["knowledge_entity"]["kind_payload"]["subtype"] == "voice_transcript"
+    assert body["data"]["audio_storage"]["backend"] in {"local", "minio"}
+
+
+def test_system_voice_tts_contract() -> None:
+    client = TestClient(app)
+    auth_headers = register_and_login(client, scope_org_id="org0")
+
+    with patch(
+        "app.api.v1.routes.system.synthesize_speech",
+        return_value=(b"RIFF....", "audio/wav", "speech.wav"),
+    ):
+        response = client.post(
+            "/v1/system/voice/tts",
+            headers=auth_headers,
+            json={"text": "hello there", "voice": "amy", "format": "wav", "speed": 1.0},
+        )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("audio/wav")
+    assert "inline; filename=\"speech.wav\"" in response.headers.get("content-disposition", "")
 
 
 def test_system_audit_events_contract() -> None:

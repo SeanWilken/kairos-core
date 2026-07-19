@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
+from urllib.parse import urlparse
 
 import boto3
 
@@ -119,6 +120,43 @@ class DocumentStorage:
             size_bytes=len(content),
             content_type=content_type,
         )
+
+    def load(self, *, uri: str) -> bytes:
+        normalized = str(uri or "").strip()
+        if normalized.startswith("local://"):
+            return self._load_local(uri=normalized)
+        if normalized.startswith("s3://"):
+            return self._load_minio(uri=normalized)
+        raise ValueError("Unsupported document URI.")
+
+    def _load_local(self, *, uri: str) -> bytes:
+        root = Path(os.getenv("MYAI_STORAGE_LOCAL_ROOT", str(Path.home() / ".myai" / "storage")))
+        object_key = uri.removeprefix("local://")
+        path = root / object_key
+        if not path.exists():
+            raise FileNotFoundError("Document not found in local storage.")
+        return path.read_bytes()
+
+    def _load_minio(self, *, uri: str) -> bytes:
+        endpoint = str(os.getenv("MYAI_STORAGE_S3_ENDPOINT", "http://localhost:9000")).strip()
+        access_key = str(os.getenv("MYAI_STORAGE_S3_ACCESS_KEY", "")).strip()
+        secret_key = str(os.getenv("MYAI_STORAGE_S3_SECRET_KEY", "")).strip()
+        region = str(os.getenv("MYAI_STORAGE_S3_REGION", "us-east-1")).strip()
+        if not access_key or not secret_key:
+            raise ValueError("Object storage credentials are not configured.")
+
+        parsed = urlparse(uri)
+        bucket = parsed.netloc
+        object_key = parsed.path.lstrip("/")
+        client = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=region,
+        )
+        response = client.get_object(Bucket=bucket, Key=object_key)
+        return response["Body"].read()
 
 
 document_storage = DocumentStorage()

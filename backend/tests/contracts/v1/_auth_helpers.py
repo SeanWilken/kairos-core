@@ -23,16 +23,21 @@ def register_and_login(
         )
         assert bootstrap.status_code == 200
 
+    auth_status = client.get("/v1/auth/status", headers={"X-Tenant-ID": tenant_id})
+    assert auth_status.status_code == 200
+    admin_configured = bool(auth_status.json()["data"]["admin_configured"])
+
     register_payload: dict[str, object] = {
         "tenant_id": tenant_id,
         "email": email,
         "password": password,
         "first_name": "Owner",
         "last_name": "User",
-        "is_global_admin": is_global_admin,
+        "is_global_admin": is_global_admin and not admin_configured,
     }
-    if org_id is not None:
-        register_payload["org_id"] = org_id
+    registration_org_id = org_id or (scope_org_id if admin_configured else None)
+    if registration_org_id is not None:
+        register_payload["org_id"] = registration_org_id
 
     register_response = client.post("/v1/auth/register", json=register_payload)
     assert register_response.status_code == 200

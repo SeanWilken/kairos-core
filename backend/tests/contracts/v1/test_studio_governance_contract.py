@@ -66,7 +66,7 @@ def test_studio_invite_accept_contract() -> None:
     assert email_messages.status_code == 200
     assert any(item["subject"].startswith("Invitation to join") for item in email_messages.json()["data"]["items"])
 
-    invitee_headers = register_and_login(client, email=invited_email)
+    invitee_headers = register_and_login(client, email=invited_email, scope_org_id=org_id)
     accept_response = client.post(
         f"/v1/studio/invites/{invite_id}/accept",
         headers=invitee_headers,
@@ -161,7 +161,7 @@ def test_studio_invite_accept_email_mismatch_contract() -> None:
     assert invite_response.status_code == 200
     invite_id = invite_response.json()["data"]["invite_id"]
 
-    mismatched_headers = register_and_login(client, email="different.member@myai.dev")
+    mismatched_headers = register_and_login(client, email="different.member@myai.dev", scope_org_id=org_id)
     accept_response = client.post(
         f"/v1/studio/invites/{invite_id}/accept",
         headers=mismatched_headers,

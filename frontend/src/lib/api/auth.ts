@@ -31,7 +31,16 @@ export type AuthTokenSet = {
   [key: string]: unknown;
 };
 
+export type AuthStatus = {
+  tenant_configured: boolean;
+  tenant_id?: string | null;
+  admin_configured: boolean;
+  login_required: boolean;
+};
+
 export const authApi = {
+  status: (client: CoreApiClient) => client.get<AuthStatus>("/v1/auth/status"),
+
   register: (client: CoreApiClient, payload: RegisterPayload) =>
     client.post<AuthTokenSet | Record<string, unknown>>("/v1/auth/register", payload),
 

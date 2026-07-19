@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -34,6 +35,158 @@ def _parse_dt(value: str | None) -> datetime | None:
     except ValueError:
         return None
     return parsed.astimezone(UTC)
+
+
+def _normalize_ref(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return re.sub(r"\s+", " ", text)
+
+
+def _estimate_text_tokens(value: str) -> int:
+    text = str(value or "").strip()
+    if not text:
+        return 0
+    return max(1, len(text) // 4)
+
+
+def _extract_query_signals(anchor_text: str) -> dict[str, list[str]]:
+    raw = str(anchor_text or "")
+    lowered = raw.lower()
+    terms = [term for term in re.findall(r"[a-zA-Z0-9_.:/\\-]+", lowered) if len(term) >= 2]
+    tags = [_normalize_ref(item) for item in re.findall(r"#([A-Za-z0-9_.:/\\-]+)", raw)]
+    file_paths = [_normalize_ref(item) for item in re.findall(r"(?:[A-Za-z]:)?[\\/\w.-]+\.[A-Za-z0-9]+", raw)]
+    code_symbols = [_normalize_ref(item) for item in re.findall(r"`([^`]+)`", raw)]
+    for pattern in (
+        r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"\bcomponent\s+([A-Za-z_][A-Za-z0-9_]*)",
+        r"\bproject\s+([A-Za-z0-9_.-]+)",
+        r"\btask\s+([A-Za-z0-9_.-]+)",
+        r"\buser\s+([A-Za-z0-9_.@-]+)",
+    ):
+        code_symbols.extend(_normalize_ref(item) for item in re.findall(pattern, raw, flags=re.IGNORECASE))
+    kind_hints = [
+        hint
+        for hint in ("user", "project", "task", "file", "code", "class", "function", "component", "document", "policy")
+        if re.search(rf"\b{re.escape(hint)}\b", lowered)
+    ]
+    return {
+        "terms": sorted({item for item in terms if item}),
+        "tags": sorted({item for item in tags if item}),
+        "file_paths": sorted({item for item in file_paths if item}),
+        "code_symbols": sorted({item for item in code_symbols if item}),
+        "kind_hints": sorted({item for item in kind_hints if item}),
+    }
+
+
+def _entity_reference_features(entity: dict[str, Any]) -> dict[str, Any]:
+    facets = entity.get("facets", {}) if isinstance(entity.get("facets"), dict) else {}
+    kind_payload = entity.get("kind_payload", {}) if isinstance(entity.get("kind_payload"), dict) else {}
+    source = entity.get("source", {}) if isinstance(entity.get("source"), dict) else {}
+    owners = entity.get("owners", []) if isinstance(entity.get("owners"), list) else []
+    content_refs = entity.get("content_refs", []) if isinstance(entity.get("content_refs"), list) else []
+    names = {
+        _normalize_ref(entity.get("title")),
+        _normalize_ref(facets.get("name")),
+        _normalize_ref(facets.get("symbol_name")),
+        _normalize_ref(facets.get("class_name")),
+        _normalize_ref(facets.get("function_name")),
+        _normalize_ref(facets.get("component_name")),
+        _normalize_ref(kind_payload.get("name")),
+        _normalize_ref(kind_payload.get("symbol_name")),
+        _normalize_ref(kind_payload.get("class_name")),
+        _normalize_ref(kind_payload.get("function_name")),
+        _normalize_ref(kind_payload.get("component_name")),
+    }
+    paths = {
+        _normalize_ref(facets.get("path")),
+        _normalize_ref(facets.get("file_path")),
+        _normalize_ref(kind_payload.get("path")),
+        _normalize_ref(kind_payload.get("file_path")),
+        _normalize_ref(source.get("external_ref")),
+    }
+    for ref in content_refs:
+        if not isinstance(ref, dict):
+            continue
+        paths.add(_normalize_ref(ref.get("ref")))
+    tags = {_normalize_ref(item) for item in entity.get("tags", []) if str(item).strip()}
+    ids = {
+        _normalize_ref(entity.get("entity_id")),
+        _normalize_ref(facets.get("project_id")),
+        _normalize_ref(facets.get("task_id")),
+        _normalize_ref(facets.get("user_id")),
+        _normalize_ref(kind_payload.get("project_id")),
+        _normalize_ref(kind_payload.get("task_id")),
+        _normalize_ref(kind_payload.get("user_id")),
+    }
+    for owner in owners:
+        if isinstance(owner, dict):
+            ids.add(_normalize_ref(owner.get("owner_id")))
+    symbol_kind = _normalize_ref(facets.get("symbol_kind") or kind_payload.get("symbol_kind") or facets.get("subtype") or kind_payload.get("subtype"))
+    return {
+        "names": {item for item in names if item},
+        "paths": {item for item in paths if item},
+        "tags": {item for item in tags if item},
+        "ids": {item for item in ids if item},
+        "symbol_kind": symbol_kind,
+        "kind": _normalize_ref(entity.get("kind")),
+    }
+
+
+def _reference_match_score(entity: dict[str, Any], query_signals: dict[str, list[str]]) -> tuple[float, list[str]]:
+    features = _entity_reference_features(entity)
+    reasons: list[str] = []
+    score = 0.0
+    tag_matches = sorted(set(query_signals.get("tags", [])) & features["tags"])
+    if tag_matches:
+        score += 1.0
+        reasons.append(f"tag:{tag_matches[0]}")
+    path_matches = [item for item in query_signals.get("file_paths", []) if item in features["paths"]]
+    if path_matches:
+        score += 1.2
+        reasons.append(f"path:{path_matches[0]}")
+    symbol_matches = [item for item in query_signals.get("code_symbols", []) if item in features["names"] or item in features["ids"]]
+    if symbol_matches:
+        score += 1.2
+        reasons.append(f"symbol:{symbol_matches[0]}")
+    if any(item == features["kind"] or item == features["symbol_kind"] for item in query_signals.get("kind_hints", [])):
+        score += 0.5
+        reasons.append(f"kind:{features['kind'] or features['symbol_kind']}")
+    return min(1.0, round(score / 2.0, 4)), reasons
+
+
+def _reference_bucket(entity: dict[str, Any]) -> str:
+    kind = _normalize_ref(entity.get("kind"))
+    facets = entity.get("facets", {}) if isinstance(entity.get("facets"), dict) else {}
+    kind_payload = entity.get("kind_payload", {}) if isinstance(entity.get("kind_payload"), dict) else {}
+    subtype = _normalize_ref(facets.get("subtype") or kind_payload.get("subtype"))
+    if kind in {"user", "person"} or facets.get("user_id") or kind_payload.get("user_id"):
+        return "users"
+    if kind == "project":
+        return "projects"
+    if kind == "task":
+        return "tasks"
+    if kind in {"symbol", "code"} or subtype in {"function", "class", "component", "code_block", "code_reference"}:
+        return "code"
+    if kind == "file" or facets.get("path") or facets.get("file_path") or kind_payload.get("path") or kind_payload.get("file_path"):
+        return "files"
+    if kind == "document":
+        return "documents"
+    if subtype in {"glossary_term", "term", "definition"} or "glossary" in {_normalize_ref(item) for item in entity.get("tags", []) if str(item).strip()}:
+        return "glossary_terms"
+    return "other"
+
+
+def _compaction_key(entity: dict[str, Any]) -> str:
+    features = _entity_reference_features(entity)
+    bucket = _reference_bucket(entity)
+    for value in sorted(features["paths"]):
+        if value:
+            return f"{bucket}:path:{value}"
+    for value in sorted(features["names"]):
+        if value:
+            return f"{bucket}:name:{value}"
+    return f"{bucket}:entity:{_normalize_ref(entity.get('entity_id'))}"
 
 
 class KnowledgeContractStore:
@@ -86,6 +239,7 @@ class KnowledgeContractStore:
             return membership_id is not None
 
     def _entity_dict(self, row: KnowledgeEntityModel) -> dict[str, Any]:
+        facets = json.loads(row.facets_json)
         return {
             "entity_id": row.entity_id,
             "tenant_id": row.tenant_id,
@@ -96,7 +250,8 @@ class KnowledgeContractStore:
             "summary": row.summary,
             "tags": json.loads(row.tags_json),
             "contexts": json.loads(row.contexts_json),
-            "facets": json.loads(row.facets_json),
+            "facets": facets,
+            "relevancy": facets.get("relevancy", {}) if isinstance(facets, dict) else {},
             "owners": json.loads(row.owners_json),
             "visibility": json.loads(row.visibility_json),
             "source": json.loads(row.source_json),
@@ -163,13 +318,17 @@ class KnowledgeContractStore:
                     created_at = row.created_at
 
                 ts = item.get("timestamps", {}) if isinstance(item.get("timestamps"), dict) else {}
+                facets = item.get("facets", {}) if isinstance(item.get("facets"), dict) else {}
+                relevancy = item.get("relevancy", {}) if isinstance(item.get("relevancy"), dict) else {}
+                if relevancy:
+                    facets = {**facets, "relevancy": relevancy}
                 row.kind = str(item["kind"])
                 row.kind_schema_version = str(item.get("kind_schema_version", "v1"))
                 row.title = str(item["title"])
                 row.summary = str(item.get("summary", ""))
                 row.tags_json = json.dumps(item.get("tags", []))
                 row.contexts_json = json.dumps(item.get("contexts", []))
-                row.facets_json = json.dumps(item.get("facets", {}))
+                row.facets_json = json.dumps(facets)
                 row.owners_json = json.dumps(item.get("owners", []))
                 row.visibility_json = json.dumps(item.get("visibility", {}))
                 row.source_json = json.dumps(item.get("source", {}))
@@ -302,6 +461,7 @@ class KnowledgeContractStore:
         anchor_text: str,
         include_node_kinds: set[str],
         include_relationship_types: set[str],
+        relevancy_focus: dict[str, float],
         max_nodes: int,
         max_edges: int,
         max_snippets: int,
@@ -417,7 +577,8 @@ class KnowledgeContractStore:
                     adjacency.setdefault(row.to_entity_id, []).append((row.from_entity_id, row.relationship_type))
                 allowed_edges += 1
 
-        terms = [term for term in anchor_text.lower().split() if term]
+        query_signals = _extract_query_signals(anchor_text)
+        terms = query_signals["terms"]
         distances: dict[str, int] = {}
         parent: dict[str, tuple[str, str]] = {}
         if anchor_entity_id and anchor_entity_id in deduped_entities_by_id:
@@ -454,25 +615,60 @@ class KnowledgeContractStore:
             semantic = 0.0
             if terms:
                 semantic = sum(1 for term in terms if term in text) / max(1, len(terms))
+            explicit_reference, explicit_reasons = _reference_match_score(entity, query_signals)
             distance = distances.get(entity["entity_id"], 99)
             graph_proximity = 1.0 if distance == 0 else (0.8 if distance == 1 else (0.6 if distance == 2 else (0.4 if distance == 3 else 0.2)))
             authority = 0.9 if entity.get("kind") == "policy" else 0.6
+            relevancy = entity.get("relevancy", {}) if isinstance(entity.get("relevancy"), dict) else {}
+            relevancy_score = 0.0
+            if relevancy_focus:
+                total_weight = 0.0
+                weighted_score = 0.0
+                for dimension, weight in relevancy_focus.items():
+                    if not isinstance(weight, (int, float)) or weight <= 0:
+                        continue
+                    value = relevancy.get(dimension, {})
+                    score_raw = value.get("score", 0.0) if isinstance(value, dict) else value
+                    score = float(score_raw) if isinstance(score_raw, (int, float)) else 0.0
+                    weighted_score += max(0.0, min(100.0, score)) / 100.0 * float(weight)
+                    total_weight += float(weight)
+                if total_weight > 0:
+                    relevancy_score = round(weighted_score / total_weight, 4)
             updated_at = _parse_dt(entity.get("timestamps", {}).get("updated_at"))
             freshness = 1.0
             if updated_at is not None:
                 age_days = max(0.0, (now - updated_at).total_seconds() / 86400.0)
                 freshness = max(0.2, 1.0 - min(0.8, age_days / 30.0))
             permission = 1.0
-            final = round(
-                semantic * 0.4 + graph_proximity * 0.3 + authority * 0.1 + freshness * 0.1 + permission * 0.1,
-                4,
-            )
+            if relevancy_focus:
+                final = round(
+                    semantic * 0.3
+                    + explicit_reference * 0.2
+                    + graph_proximity * 0.25
+                    + authority * 0.1
+                    + freshness * 0.1
+                    + permission * 0.1
+                    + relevancy_score * 0.15,
+                    4,
+                )
+            else:
+                final = round(
+                    semantic * 0.35
+                    + explicit_reference * 0.2
+                    + graph_proximity * 0.25
+                    + authority * 0.1
+                    + freshness * 0.05
+                    + permission * 0.05,
+                    4,
+                )
             reasons = {
+                "explicit_reference": explicit_reference,
                 "semantic_match": semantic,
                 "graph_proximity": graph_proximity,
                 "owner_authority": authority,
                 "freshness_boost": freshness,
                 "policy_priority": 0.0,
+                "relevancy_match": relevancy_score,
             }
             reason_code = max(reasons, key=reasons.get)
             scored.append(
@@ -486,10 +682,13 @@ class KnowledgeContractStore:
                         "semantic": round(semantic, 4),
                         "graph_proximity": round(graph_proximity, 4),
                         "authority": round(authority, 4),
+                        "relevancy": round(relevancy_score, 4),
                         "freshness": round(freshness, 4),
                         "permission_suitability": permission,
+                        "explicit_reference": round(explicit_reference, 4),
                         "final": final,
                     },
+                    "reference_reasons": explicit_reasons,
                 }
             )
 
@@ -503,34 +702,68 @@ class KnowledgeContractStore:
             ),
             reverse=True,
         )
-        selected = scored[:max_nodes]
-        if len(scored) > max_nodes:
-            for item in scored[max_nodes:]:
-                exclusions.append({"entity_id": item["entity"]["entity_id"], "reason": "budget_exceeded"})
+        selected: list[dict[str, Any]] = []
+        selected_tokens = 0
+        seen_compaction_keys: set[str] = set()
+        compacted_count = 0
+        for item in scored:
+            entity = item["entity"]
+            compaction_key = _compaction_key(entity)
+            if compaction_key in seen_compaction_keys:
+                compacted_count += 1
+                exclusions.append({"entity_id": entity["entity_id"], "reason": "compacted_duplicate"})
+                continue
+            estimated_tokens = _estimate_text_tokens(
+                f"{entity.get('title', '')}\n{entity.get('summary', '')}\n"
+                + "\n".join(
+                    str(ref.get("snippet", ""))
+                    for ref in entity.get("content_refs", [])
+                    if isinstance(ref, dict) and str(ref.get("snippet", "")).strip()
+                )
+            )
+            if len(selected) >= max_nodes or (selected and selected_tokens + estimated_tokens > max_tokens):
+                exclusions.append({"entity_id": entity["entity_id"], "reason": "budget_exceeded"})
+                continue
+            seen_compaction_keys.add(compaction_key)
+            selected.append({**item, "estimated_tokens": estimated_tokens})
+            selected_tokens += estimated_tokens
 
         sources: list[dict[str, Any]] = []
         provenance: list[dict[str, Any]] = []
+        reference_maps: dict[str, list[dict[str, Any]]] = {
+            "users": [],
+            "projects": [],
+            "tasks": [],
+            "files": [],
+            "code": [],
+            "documents": [],
+            "glossary_terms": [],
+            "other": [],
+        }
         for item in selected:
             entity = item["entity"]
-            sources.append(
-                {
-                    "entity_id": entity["entity_id"],
-                    "kind": entity.get("kind"),
-                    "title": entity.get("title"),
-                    "score": item["final"],
-                    "selection_reason_code": item["reason_code"],
-                    "selection_reason_short": item["reason_short"],
-                    "primary_path": item["path"][:4],
-                }
-            )
+            source_row = {
+                "entity_id": entity["entity_id"],
+                "kind": entity.get("kind"),
+                "title": entity.get("title"),
+                "score": item["final"],
+                "selection_reason_code": item["reason_code"],
+                "selection_reason_short": item["reason_short"],
+                "primary_path": item["path"][:4],
+                "reference_reasons": item.get("reference_reasons", []),
+                "estimated_tokens": item.get("estimated_tokens", 0),
+            }
+            sources.append(source_row)
             provenance.append(
                 {
                     "entity_id": entity["entity_id"],
                     "selection_reason": item["reason_short"],
                     "path": item["path"][:4],
                     "scores": item["scores"],
+                    "reference_reasons": item.get("reference_reasons", []),
                 }
             )
+            reference_maps[_reference_bucket(entity)].append(source_row)
 
         return {
             "bundle_id": f"ctx_{int(now.timestamp() * 1000)}",
@@ -545,13 +778,102 @@ class KnowledgeContractStore:
             "provenance": provenance,
             "inferred_tags": [],
             "inferred_contexts": [],
+            "query_signals": query_signals,
+            "reference_maps": {key: value[:max_snippets] for key, value in reference_maps.items() if value},
+            "compaction": {
+                "strategy": "deterministic_prune_compact_v1",
+                "selected_tokens": selected_tokens,
+                "max_tokens": max_tokens,
+                "compacted_duplicates": compacted_count,
+            },
             "exclusion_report": exclusions if debug else [],
             "summary": {
                 "selected_nodes": len(sources[:max_snippets]),
                 "selected_edges": min(allowed_edges, max_edges),
                 "max_tokens": max_tokens,
+                "selected_tokens": selected_tokens,
             },
         }
+
+    def list_visible_entities(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        user_id: str,
+        kind: str | None = None,
+        limit: int = 100,
+        bypass_acl: bool = False,
+    ) -> list[dict[str, Any]]:
+        with SessionLocal() as db:
+            org_memberships = {
+                str(value)
+                for value in db.scalars(
+                    select(StudioOrganizationMembershipModel.org_id).where(
+                        StudioOrganizationMembershipModel.tenant_id == tenant_id,
+                        StudioOrganizationMembershipModel.user_id == user_id,
+                        StudioOrganizationMembershipModel.status == "active",
+                    )
+                ).all()
+            }
+            team_memberships = {
+                str(value)
+                for value in db.scalars(
+                    select(StudioTeamMembershipModel.team_id).where(
+                        StudioTeamMembershipModel.tenant_id == tenant_id,
+                        StudioTeamMembershipModel.user_id == user_id,
+                        StudioTeamMembershipModel.status == "active",
+                    )
+                ).all()
+            }
+
+            stmt = select(KnowledgeEntityModel).where(
+                KnowledgeEntityModel.tenant_id == tenant_id,
+                KnowledgeEntityModel.org_id == org_id,
+            )
+            if kind:
+                stmt = stmt.where(KnowledgeEntityModel.kind == kind)
+            rows = db.scalars(stmt.order_by(KnowledgeEntityModel.updated_at.desc()).limit(limit)).all()
+
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            entity = self._entity_dict(row)
+            if bypass_acl:
+                items.append(entity)
+                continue
+            visibility = entity.get("visibility", {})
+            if not isinstance(visibility, dict) or not self._allows_visibility(
+                visibility,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                org_id=org_id,
+                org_memberships=org_memberships,
+                team_memberships=team_memberships,
+            ):
+                continue
+            items.append(entity)
+        return items
+
+    def get_visible_entity(
+        self,
+        *,
+        tenant_id: str,
+        org_id: str,
+        user_id: str,
+        entity_id: str,
+        bypass_acl: bool = False,
+    ) -> dict[str, Any] | None:
+        items = self.list_visible_entities(
+            tenant_id=tenant_id,
+            org_id=org_id,
+            user_id=user_id,
+            limit=500,
+            bypass_acl=bypass_acl,
+        )
+        for item in items:
+            if str(item.get("entity_id", "")).strip() == entity_id:
+                return item
+        return None
 
 
 knowledge_contract_store = KnowledgeContractStore()

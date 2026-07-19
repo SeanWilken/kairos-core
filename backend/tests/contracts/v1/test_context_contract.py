@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import io
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -45,6 +46,7 @@ def _entity(entity_id: str, *, kind: str, title: str, visibility: dict[str, str]
         },
         "content_refs": [],
         "quality": {"confidence": 1.0, "verification_state": "verified", "evidence_refs": []},
+        "relevancy": {},
         "lifecycle": {"status": "active", "effective_from": None, "effective_to": None, "staleness_ttl_seconds": 3600},
         "timestamps": {
             "created_at": now,
@@ -164,6 +166,7 @@ def test_context_resolve_non_debug_payload_contract() -> None:
     assert isinstance(first["entity_id"], str)
     assert isinstance(first["score"], float)
     assert first["selection_reason_code"] in {
+        "explicit_reference",
         "semantic_match",
         "policy_priority",
         "graph_proximity",
@@ -173,6 +176,571 @@ def test_context_resolve_non_debug_payload_contract() -> None:
     assert isinstance(first["selection_reason_short"], str)
     assert isinstance(first["primary_path"], list)
     assert len(first["primary_path"]) <= 4
+
+
+def test_context_resolve_relevancy_focus_biases_selection() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.resolve.relevancy@myai.dev",
+        org_name="Context Resolve Relevancy",
+        org_slug="context-resolve-relevancy",
+    )
+
+    entity_a = _entity(
+        "ent-backend",
+        kind="document",
+        title="Backend Service Notes",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    entity_a["relevancy"] = {"backend": {"score": 95, "confidence": 90, "assignedBy": "human"}}
+    entity_b = _entity(
+        "ent-frontend",
+        kind="document",
+        title="Frontend Styling Notes",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    entity_b["relevancy"] = {"frontend": {"score": 95, "confidence": 90, "assignedBy": "human"}}
+
+    upsert_entities = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [entity_a, entity_b]},
+    )
+    assert upsert_entities.status_code == 200
+
+    resolve = client.post(
+        "/v1/context/resolve",
+        headers=headers,
+        json={
+            "anchor": {"text": "notes"},
+            "lens": {
+                "include_node_kinds": ["document"],
+                "relevancy_focus": {"backend": 1.0},
+            },
+            "budget": {"max_nodes": 5, "max_edges": 5, "max_snippets": 5, "max_tokens": 2000},
+        },
+    )
+    assert resolve.status_code == 200
+    sources = resolve.json()["data"]["sources"]
+    assert sources[0]["entity_id"] == "ent-backend"
+
+
+def test_context_artifact_promotion_contract() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.artifact.promote@myai.dev",
+        org_name="Context Artifact Promote",
+        org_slug="context-artifact-promote",
+    )
+
+    base_entity = _entity(
+        "ent-related-task",
+        kind="task",
+        title="Related Task",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    upsert_entities = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [base_entity]},
+    )
+    assert upsert_entities.status_code == 200
+
+    promoted = client.post(
+        "/v1/knowledge/artifacts/promote",
+        headers=headers,
+        json={
+            "org_id": org_id,
+            "artifact_kind": "knowledge_node",
+            "artifact_subtype": "conversation_block",
+            "title": "Useful deployment answer",
+            "summary": "Promoted from chat",
+            "content": "## Deployment Notes\n- refresh image\n- verify health",
+            "tags": ["deployment", "chat"],
+            "contexts": ["operations"],
+            "relevancy": {"backend": {"score": 88, "confidence": 80, "assignedBy": "human"}},
+            "relationships": [
+                {
+                    "target_entity_id": "ent-related-task",
+                    "relationship_type": "supports",
+                }
+            ],
+        },
+    )
+    assert promoted.status_code == 200
+    body = promoted.json()["data"]
+    artifact = body["artifact"]
+    assert artifact["kind"] == "knowledge_node"
+    assert artifact["facets"]["subtype"] == "conversation_block"
+    assert artifact["relevancy"]["backend"]["score"] == 88
+    assert len(body["relationships"]) == 1
+    assert body["relationships"][0]["relationship_type"] == "supports"
+
+
+def test_context_artifact_rule_evaluation_contract() -> None:
+    client = TestClient(app)
+    headers, _org_id = _org_headers(
+        client,
+        email="context.artifact.rules@myai.dev",
+        org_name="Context Artifact Rules",
+        org_slug="context-artifact-rules",
+    )
+
+    response = client.post(
+        "/v1/knowledge/artifacts/evaluate-rules",
+        headers=headers,
+        json={
+            "artifact": {
+                "kind": "knowledge_node",
+                "summary": "Deployment summary",
+                "tags": ["deployment"],
+                "visibility": {"scope": "org"},
+                "relevancy": {"backend": {"score": 92, "confidence": 80, "assignedBy": "human"}},
+                "facets": {},
+                "kind_payload": {"content": "Deployment notes"},
+                "quality": {},
+            },
+            "rules": [
+                {
+                    "rule_id": "require-review-for-deployments",
+                    "condition": {"type": "tag_present", "config": {"value": "deployment"}},
+                    "action": {"type": "require_review", "config": {}, "reason": "deployment_review"},
+                    "priority": 10,
+                },
+                {
+                    "rule_id": "tag-backend-hot",
+                    "condition": {"type": "relevancy_min", "config": {"dimension": "backend", "value": 90}},
+                    "action": {"type": "add_tag", "tag": "hot-backend"},
+                    "priority": 20,
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["blocked"] is False
+    assert data["review_required"] is True
+    artifact = data["artifact"]
+    assert "hot-backend" in artifact["tags"]
+    assert artifact["quality"]["review_required"] is True
+
+
+def test_context_artifact_promotion_blocked_by_rule_contract() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.artifact.block@myai.dev",
+        org_name="Context Artifact Block",
+        org_slug="context-artifact-block",
+    )
+
+    response = client.post(
+        "/v1/knowledge/artifacts/promote",
+        headers=headers,
+        json={
+            "org_id": org_id,
+            "artifact_kind": "knowledge_node",
+            "artifact_subtype": "conversation_block",
+            "title": "Private legal note",
+            "summary": "Sensitive",
+            "content": "Do not promote",
+            "tags": ["legal"],
+            "validation_rules": [
+                {
+                    "rule_id": "block-legal",
+                    "condition": {"type": "tag_present", "config": {"value": "legal"}},
+                    "action": {"type": "block"},
+                    "priority": 1,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"]["reason_code"] == "ARTIFACT_PROMOTION_BLOCKED"
+
+
+def test_context_profiles_contract() -> None:
+    client = TestClient(app)
+    headers, _org_id = _org_headers(
+        client,
+        email="context.profiles@myai.dev",
+        org_name="Context Profiles Org",
+        org_slug="context-profiles-org",
+    )
+
+    listed = client.get("/v1/context/profiles", headers=headers)
+    assert listed.status_code == 200
+    items = listed.json()["data"]["items"]
+    profile_ids = {item.get("profile_id") for item in items if isinstance(item, dict)}
+    assert "help-desk-agent" in profile_ids
+    assert "generalist" in profile_ids
+    assert "knowledge-librarian" in profile_ids
+    assert "document-drafter" in profile_ids
+    assert "project-manager" in profile_ids
+    assert "scrum-master" in profile_ids
+
+    fetched = client.get("/v1/context/profiles/help-desk-agent", headers=headers)
+    assert fetched.status_code == 200
+    data = fetched.json()["data"]
+    assert data["profile_id"] == "help-desk-agent"
+    assert isinstance(data.get("relevancy_focus", {}), dict)
+    assert isinstance(data.get("preferred_tools", []), list)
+    assert isinstance(data.get("preferred_tool_policies", []), list)
+    assert isinstance(data.get("provider_preferences", {}), dict)
+    assert data["provider_preferences"]["text_to_speech"]["provider_id"] == "elevenlabs"
+    assert data["voice_defaults"]["tone"] == "friendly"
+
+
+def test_knowledge_conventions_contract() -> None:
+    client = TestClient(app)
+    headers, _org_id = _org_headers(
+        client,
+        email="knowledge.conventions@myai.dev",
+        org_name="Knowledge Conventions Org",
+        org_slug="knowledge-conventions-org",
+    )
+
+    response = client.get("/v1/knowledge/conventions", headers=headers)
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert "file" in data["entity_conventions"]
+    assert "symbol" in data["entity_conventions"]
+    assert "glossary_term" in data["entity_conventions"]
+    assert "should_be_shared" in data["reuse_relationship_types"]
+
+
+def test_knowledge_entity_convention_validation_contract() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="knowledge.conventions.validate@myai.dev",
+        org_name="Knowledge Convention Validate",
+        org_slug="knowledge-convention-validate",
+    )
+
+    invalid_file = _entity(
+        "ent-invalid-file",
+        kind="file",
+        title="Missing Path",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    invalid_file["facets"] = {}
+
+    response = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [invalid_file]},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["details"]["reason_code"] == "KNOWLEDGE_ENTITY_CONVENTION_FACETS_REQUIRED"
+
+
+def test_knowledge_code_ingest_contract() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="knowledge.code.ingest@myai.dev",
+        org_name="Knowledge Code Ingest",
+        org_slug="knowledge-code-ingest",
+    )
+
+    response = client.post(
+        "/v1/knowledge/code-ingest",
+        headers=headers,
+        json={
+            "org_id": org_id,
+            "workspace_id": "ws_local_aide",
+            "runner_id": "runner_local_01",
+            "project": {
+                "title": "Project A",
+                "project_key": "proj-a",
+                "repo_name": "project-a",
+                "repo_root": "C:/code/project-a"
+            },
+            "files": [
+                {
+                    "path": "src/helpers.py",
+                    "language": "python",
+                    "snippet": "def normalize_helper(value):\n    return value.strip()",
+                    "symbols": [
+                        {
+                            "name": "normalize_helper",
+                            "symbol_kind": "function",
+                            "signature": "def normalize_helper(value)",
+                            "body_snippet": "return value.strip()",
+                            "line_start": 1,
+                            "line_end": 2
+                        }
+                    ]
+                },
+                {
+                    "path": "src/helpers_v2.py",
+                    "language": "python",
+                    "symbols": [
+                        {
+                            "name": "normalize_helper_v2",
+                            "symbol_kind": "function"
+                        }
+                    ]
+                }
+            ],
+            "reuse_links": [
+                {
+                    "from_ref": "src/helpers.py::normalize_helper",
+                    "to_ref": "src/helpers_v2.py::normalize_helper_v2",
+                    "relationship_type": "should_be_shared",
+                    "facets": {"reason": "extract common helper"}
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["workspace_id"] == "ws_local_aide"
+    assert data["runner_id"] == "runner_local_01"
+    assert data["entities_upserted"] == 5
+    assert data["relationships_upserted"] >= 6
+    entity_kinds = {item["kind"] for item in data["items"]["entities"]}
+    assert "project" in entity_kinds
+    assert "file" in entity_kinds
+    assert "symbol" in entity_kinds
+    rel_types = {item["relationship_type"] for item in data["items"]["relationships"]}
+    assert "should_be_shared" in rel_types
+
+
+def test_context_resolve_profile_id_biases_selection() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.resolve.profile@myai.dev",
+        org_name="Context Resolve Profile",
+        org_slug="context-resolve-profile",
+    )
+
+    entity_a = _entity(
+        "ent-helpdesk",
+        kind="knowledge_node",
+        title="Customer Issue Playbook",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    entity_a["relevancy"] = {"customer_support": {"score": 96, "confidence": 90, "assignedBy": "human"}}
+    entity_b = _entity(
+        "ent-general-backend",
+        kind="knowledge_node",
+        title="Backend General Notes",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    entity_b["relevancy"] = {"backend": {"score": 90, "confidence": 90, "assignedBy": "human"}}
+
+    upsert_entities = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [entity_a, entity_b]},
+    )
+    assert upsert_entities.status_code == 200
+
+    resolve = client.post(
+        "/v1/context/resolve",
+        headers=headers,
+        json={
+            "anchor": {"text": "playbook notes"},
+            "lens": {
+                "profile_id": "help-desk-agent",
+                "include_node_kinds": ["knowledge_node"],
+            },
+            "budget": {"max_nodes": 5, "max_edges": 5, "max_snippets": 5, "max_tokens": 2000},
+        },
+    )
+    assert resolve.status_code == 200
+    sources = resolve.json()["data"]["sources"]
+    assert sources[0]["entity_id"] == "ent-helpdesk"
+
+
+def test_context_resolve_cross_project_reuse_links_contract() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.resolve.reuse@myai.dev",
+        org_name="Context Resolve Reuse",
+        org_slug="context-resolve-reuse",
+    )
+
+    project_a = _entity("ent-project-a", kind="project", title="Project A", visibility={"scope": "org", "acl_policy_id": "policy-org"})
+    project_a["facets"] = {"project_key": "proj-a", "repo_name": "project-a"}
+    project_b = _entity("ent-project-b", kind="project", title="Project B", visibility={"scope": "org", "acl_policy_id": "policy-org"})
+    project_b["facets"] = {"project_key": "proj-b", "repo_name": "project-b"}
+    symbol_a = _entity("ent-symbol-a", kind="symbol", title="normalize_helper", visibility={"scope": "org", "acl_policy_id": "policy-org"})
+    symbol_a["facets"] = {"symbol_name": "normalize_helper", "symbol_kind": "function", "path": "project-a/src/helpers.py"}
+    symbol_b = _entity("ent-symbol-b", kind="symbol", title="normalize_helper_v2", visibility={"scope": "org", "acl_policy_id": "policy-org"})
+    symbol_b["facets"] = {"symbol_name": "normalize_helper_v2", "symbol_kind": "function", "path": "project-b/src/helpers.py"}
+
+    upsert = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [project_a, project_b, symbol_a, symbol_b]},
+    )
+    assert upsert.status_code == 200
+
+    now = datetime.now(UTC).isoformat()
+    relationships = [
+        {
+            "relationship_id": "rel-project-a-symbol-a",
+            "from_entity_id": "ent-project-a",
+            "to_entity_id": "ent-symbol-a",
+            "relationship_type": "contains",
+            "directionality": "directed",
+            "weight": 1.0,
+            "facets": {},
+            "evidence": [],
+            "visibility": {"scope": "org", "acl_policy_id": "policy-org"},
+            "source": {"source_system": "tests", "source_id": "rel-project-a-symbol-a", "source_of_truth": True},
+            "timestamps": {"created_at": now, "updated_at": now, "observed_at": now, "effective_from": None, "effective_to": None},
+            "schema_version": "v1",
+        },
+        {
+            "relationship_id": "rel-project-b-symbol-b",
+            "from_entity_id": "ent-project-b",
+            "to_entity_id": "ent-symbol-b",
+            "relationship_type": "contains",
+            "directionality": "directed",
+            "weight": 1.0,
+            "facets": {},
+            "evidence": [],
+            "visibility": {"scope": "org", "acl_policy_id": "policy-org"},
+            "source": {"source_system": "tests", "source_id": "rel-project-b-symbol-b", "source_of_truth": True},
+            "timestamps": {"created_at": now, "updated_at": now, "observed_at": now, "effective_from": None, "effective_to": None},
+            "schema_version": "v1",
+        },
+        {
+            "relationship_id": "rel-symbol-reuse",
+            "from_entity_id": "ent-symbol-a",
+            "to_entity_id": "ent-symbol-b",
+            "relationship_type": "similar_to",
+            "directionality": "bidirectional",
+            "weight": 1.0,
+            "facets": {"reason": "same_normalization_logic"},
+            "evidence": [],
+            "visibility": {"scope": "org", "acl_policy_id": "policy-org"},
+            "source": {"source_system": "tests", "source_id": "rel-symbol-reuse", "source_of_truth": True},
+            "timestamps": {"created_at": now, "updated_at": now, "observed_at": now, "effective_from": None, "effective_to": None},
+            "schema_version": "v1",
+        },
+        {
+            "relationship_id": "rel-symbol-share",
+            "from_entity_id": "ent-symbol-b",
+            "to_entity_id": "ent-symbol-a",
+            "relationship_type": "should_be_shared",
+            "directionality": "directed",
+            "weight": 1.0,
+            "facets": {"reason": "extract_common_helper"},
+            "evidence": [],
+            "visibility": {"scope": "org", "acl_policy_id": "policy-org"},
+            "source": {"source_system": "tests", "source_id": "rel-symbol-share", "source_of_truth": True},
+            "timestamps": {"created_at": now, "updated_at": now, "observed_at": now, "effective_from": None, "effective_to": None},
+            "schema_version": "v1",
+        },
+    ]
+    rel_response = client.post(
+        "/v1/knowledge/relationships/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": relationships},
+    )
+    assert rel_response.status_code == 200
+
+    resolve = client.post(
+        "/v1/context/resolve",
+        headers=headers,
+        json={
+            "anchor": {"entity_id": "ent-symbol-a", "text": "reuse function `normalize_helper` across projects"},
+            "lens": {
+                "profile_id": "ai-coding-agent",
+                "include_node_kinds": ["project", "symbol"],
+                "include_relationship_types": ["contains", "similar_to", "should_be_shared"],
+            },
+            "budget": {"max_nodes": 10, "max_edges": 10, "max_snippets": 10, "max_tokens": 4000},
+        },
+    )
+    assert resolve.status_code == 200
+    data = resolve.json()["data"]
+    ids = {item["entity_id"] for item in data["sources"]}
+    assert "ent-symbol-a" in ids
+    assert "ent-symbol-b" in ids
+    assert "ent-project-a" in ids or "ent-project-b" in ids
+    code_ids = {item["entity_id"] for item in data["reference_maps"]["code"]}
+    assert "ent-symbol-a" in code_ids
+    assert "ent-symbol-b" in code_ids
+
+
+def test_context_resolve_builds_reference_maps_and_compacts_duplicates() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.resolve.refs@myai.dev",
+        org_name="Context Resolve Refs",
+        org_slug="context-resolve-refs",
+    )
+
+    file_entity = _entity(
+        "ent-file-main",
+        kind="file",
+        title="tool_catalog.py",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    file_entity["facets"] = {"path": "backend/app/core/tool_catalog.py"}
+    file_entity["content_refs"] = [{"ref_type": "file", "ref": "backend/app/core/tool_catalog.py", "snippet": "def list_tools(): pass", "checksum": ""}]
+
+    duplicate_file_entity = _entity(
+        "ent-file-duplicate",
+        kind="file",
+        title="tool_catalog copy",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    duplicate_file_entity["facets"] = {"path": "backend/app/core/tool_catalog.py"}
+
+    code_entity = _entity(
+        "ent-symbol-main",
+        kind="symbol",
+        title="ToolCatalog",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    code_entity["facets"] = {"symbol_name": "ToolCatalog", "symbol_kind": "class", "path": "backend/app/core/tool_catalog.py"}
+
+    task_entity = _entity(
+        "ent-task-ref",
+        kind="task",
+        title="Unify helper reuse",
+        visibility={"scope": "org", "acl_policy_id": "policy-org"},
+    )
+    task_entity["summary"] = "Track reuse of helper functions across projects"
+
+    upsert = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [file_entity, duplicate_file_entity, code_entity, task_entity]},
+    )
+    assert upsert.status_code == 200
+
+    resolve = client.post(
+        "/v1/context/explain",
+        headers=headers,
+        json={
+            "anchor": {"text": "reuse `ToolCatalog` in file backend/app/core/tool_catalog.py for task helper-reuse #reuse"},
+            "lens": {"include_node_kinds": ["file", "symbol", "task"]},
+            "budget": {"max_nodes": 10, "max_edges": 10, "max_snippets": 10, "max_tokens": 120},
+        },
+    )
+    assert resolve.status_code == 200
+    data = resolve.json()["data"]
+    assert data["query_signals"]["file_paths"] == ["backend/app/core/tool_catalog.py"]
+    assert "files" in data["reference_maps"]
+    assert data["reference_maps"]["files"][0]["entity_id"] == "ent-file-main"
+    assert "code" in data["reference_maps"]
+    assert data["reference_maps"]["code"][0]["entity_id"] == "ent-symbol-main"
+    assert data["compaction"]["strategy"] == "deterministic_prune_compact_v1"
+    exclusions = data.get("exclusion_report", [])
+    assert any(item.get("entity_id") == "ent-file-duplicate" and item.get("reason") == "compacted_duplicate" for item in exclusions)
 
 
 def test_context_explain_reports_edge_acl_denied_contract() -> None:
@@ -432,6 +1000,172 @@ def test_context_document_upload_contract() -> None:
     assert "hello knowledge" in refs[0].get("snippet", "")
 
 
+def test_context_document_list_and_content_contract() -> None:
+    client = TestClient(app)
+    owner_headers, org_id = _org_headers(
+        client,
+        email="context.upload.list@myai.dev",
+        org_name="Context Upload List Org",
+        org_slug="context-upload-list-org",
+    )
+
+    upload = client.post(
+        "/v1/knowledge/documents/upload",
+        headers=owner_headers,
+        data={
+            "org_id": org_id,
+            "title": "CSV Upload Test",
+            "summary": "Contract list test",
+            "tags_json": '["docs","csv"]',
+            "visibility_json": '{"scope":"org","acl_policy_id":"policy-org"}',
+        },
+        files={"file": ("sample.csv", io.BytesIO(b"name,status\nalpha,ok\n"), "text/csv")},
+    )
+    assert upload.status_code == 200
+    document_id = upload.json()["data"]["entity"]["entity_id"]
+
+    listed = client.get(
+        "/v1/knowledge/documents",
+        headers=owner_headers,
+        params={"org_id": org_id},
+    )
+    assert listed.status_code == 200
+    items = listed.json()["data"].get("items", [])
+    assert any(item.get("document_id") == document_id for item in items)
+
+    fetched = client.get(f"/v1/knowledge/documents/{document_id}", headers=owner_headers)
+    assert fetched.status_code == 200
+    document = fetched.json()["data"]["document"]
+    assert document["filename"] == "sample.csv"
+    assert document["content_type"] == "text/csv"
+
+    content = client.get(f"/v1/knowledge/documents/{document_id}/content", headers=owner_headers)
+    assert content.status_code == 200
+    assert content.headers["content-type"].startswith("text/csv")
+    assert "inline; filename=\"sample.csv\"" in content.headers.get("content-disposition", "")
+    assert b"name,status" in content.content
+
+
+def test_context_document_list_filters_and_cursor_contract() -> None:
+    client = TestClient(app)
+    owner_headers, org_id = _org_headers(
+        client,
+        email="context.upload.filters@myai.dev",
+        org_name="Context Upload Filters Org",
+        org_slug="context-upload-filters-org",
+    )
+
+    for title, filename, payload in [
+        ("Alpha CSV", "alpha.csv", b"name,status\nalpha,ok\n"),
+        ("Beta CSV", "beta.csv", b"name,status\nbeta,ok\n"),
+    ]:
+        upload = client.post(
+            "/v1/knowledge/documents/upload",
+            headers=owner_headers,
+            data={
+                "org_id": org_id,
+                "title": title,
+                "summary": f"Summary for {title}",
+                "tags_json": '["docs","csv"]',
+                "visibility_json": '{"scope":"org","acl_policy_id":"policy-org"}',
+            },
+            files={"file": (filename, io.BytesIO(payload), "text/csv")},
+        )
+        assert upload.status_code == 200
+
+    filtered = client.get(
+        "/v1/knowledge/documents",
+        headers=owner_headers,
+        params={"org_id": org_id, "source_type": "file", "visibility_scope": "org", "query": "beta"},
+    )
+    assert filtered.status_code == 200
+    filtered_items = filtered.json()["data"]["items"]
+    assert len(filtered_items) == 1
+    assert filtered_items[0]["title"] == "Beta CSV"
+    assert filtered_items[0]["processing_status"] == "active"
+
+    first_page = client.get(
+        "/v1/knowledge/documents",
+        headers=owner_headers,
+        params={"org_id": org_id, "limit": 1},
+    )
+    assert first_page.status_code == 200
+    first_data = first_page.json()["data"]
+    assert len(first_data["items"]) == 1
+    assert isinstance(first_data.get("next_cursor"), str)
+
+    second_page = client.get(
+        "/v1/knowledge/documents",
+        headers=owner_headers,
+        params={"org_id": org_id, "limit": 1, "cursor": first_data["next_cursor"]},
+    )
+    assert second_page.status_code == 200
+    second_data = second_page.json()["data"]
+    assert len(second_data["items"]) == 1
+    assert second_data["items"][0]["document_id"] != first_data["items"][0]["document_id"]
+
+
+def test_context_knowledge_nodes_list_and_detail_contract() -> None:
+    client = TestClient(app)
+    headers, org_id = _org_headers(
+        client,
+        email="context.nodes.list@myai.dev",
+        org_name="Context Nodes Org",
+        org_slug="context-nodes-org",
+    )
+
+    now = datetime.now(UTC).isoformat()
+    entity_id = f"node-voice-{uuid4()}"
+    entity = {
+        "entity_id": entity_id,
+        "kind": "knowledge_node",
+        "kind_schema_version": "v1",
+        "title": "Voice Transcript Note",
+        "summary": "Transcript summary",
+        "tags": ["voice", "notes"],
+        "contexts": [],
+        "facets": {"subtype": "voice_transcript"},
+        "owners": [{"owner_type": "user", "owner_id": "owner-1"}],
+        "visibility": {"scope": "org", "acl_policy_id": "policy-org"},
+        "source": {
+            "source_system": "voice_stt",
+            "source_id": "meeting-1",
+            "external_ref": "local://tenant0/org0/meeting.wav",
+            "source_of_truth": True,
+            "dedupe_key": "meeting-1",
+        },
+        "content_refs": [{"ref_type": "uri", "ref": "local://tenant0/org0/meeting.wav", "snippet": "meeting notes transcript", "checksum": ""}],
+        "quality": {"confidence": 0.9, "verification_state": "derived", "evidence_refs": []},
+        "relevancy": {"backend": {"score": 91, "confidence": 85, "assignedBy": "human"}},
+        "lifecycle": {"status": "active", "effective_from": None, "effective_to": None, "staleness_ttl_seconds": 0},
+        "timestamps": {"created_at": now, "updated_at": now, "observed_at": now, "effective_from": None, "effective_to": None},
+        "kind_payload": {"subtype": "voice_transcript", "transcript": "meeting notes transcript"},
+        "schema_version": "v1",
+    }
+    upsert = client.post(
+        "/v1/knowledge/entities/upsert",
+        headers=headers,
+        json={"org_id": org_id, "items": [entity]},
+    )
+    assert upsert.status_code == 200
+
+    listed = client.get(
+        "/v1/knowledge/nodes",
+        headers=headers,
+        params={"org_id": org_id, "kind": "knowledge_node", "subtype": "voice_transcript", "tag": "voice"},
+    )
+    assert listed.status_code == 200
+    items = listed.json()["data"]["items"]
+    assert isinstance(items, list)
+
+    fetched = client.get(f"/v1/knowledge/nodes/{entity_id}", headers=headers)
+    assert fetched.status_code == 200
+    body = fetched.json()["data"]
+    assert body["entity"]["entity_id"] == entity_id
+    assert body["summary"]["subtype"] == "voice_transcript"
+    assert body["summary"]["relevancy"]["backend"]["score"] == 91
+
+
 def test_context_channels_contract() -> None:
     client = TestClient(app)
     headers, _org_id = _org_headers(
@@ -472,6 +1206,7 @@ def test_context_persona_capabilities_contract() -> None:
             "data": {
                 "assigned_tools": ["knowledge_search", "code_generation"],
                 "access_policy": {"visibility": "organization"},
+                "voice": {"tone": "warm", "cadence": "measured", "voice_id": "amy"},
             },
         },
     )
@@ -491,6 +1226,7 @@ def test_context_persona_capabilities_contract() -> None:
     assert data["runtime"]["provider_id"] == "openai"
     assert data["runtime"]["model_id"] == "gpt-4o-mini"
     assert "knowledge_search" in data.get("tools", [])
+    assert data["voice"]["tone"] == "warm"
 
 
 def test_context_daily_summary_contract() -> None:

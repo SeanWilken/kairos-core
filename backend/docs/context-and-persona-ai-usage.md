@@ -7,6 +7,33 @@ This document summarizes Core endpoints for federated context resolution and per
 - `GET /v1/context/channels`
 - Returns default channel profiles (development, architecture, operations) with retrieval budgets and lens defaults.
 
+## Relevancy Profiles
+
+- `GET /v1/context/profiles`
+- `GET /v1/context/profiles/{profile_id}`
+
+Returns built-in retrieval presets such as:
+
+- frontend engineer
+- backend engineer
+- help desk agent
+- generalist
+- knowledge librarian
+- relations manager
+- document drafter
+- project manager
+- scrum master
+
+Profiles expose:
+
+- `relevancy_focus`
+- preferred node kinds
+- preferred relationship types
+- preferred tools / outputs
+- `preferred_tool_policies`
+- `provider_preferences`
+- voice defaults for later persona-facing interaction layers
+
 ## Identity Federation
 
 - `GET /v1/context/identity`
@@ -80,6 +107,8 @@ This returns stored summary entries so users can review activity in journal-like
 - `GET /v1/context/personas/{persona_id}/capability`
   - Returns capability details for one persona if accessible.
 
+Persona capability payloads also include a `voice` object if the persona has voice metadata configured.
+
 ## Persona Query with Federated Context
 
 - `POST /v1/context/persona-query`
@@ -93,8 +122,10 @@ Request body:
   "anchor": { "entity_id": "<optional_entity_id>", "text": "resolver policy" },
   "lens": {
     "channel_profile_id": "development-default",
+    "profile_id": "backend-engineer",
     "include_node_kinds": ["project", "task", "file", "document", "policy"],
-    "include_relationship_types": ["contains", "depends_on", "imports", "governed_by"]
+    "include_relationship_types": ["contains", "depends_on", "imports", "governed_by"],
+    "relevancy_focus": {"backend": 1.0, "security": 0.4}
   },
   "budget": { "max_nodes": 40, "max_edges": 80, "max_snippets": 20, "max_tokens": 8000 },
   "options": { "include_exclusion_report": false }
@@ -107,6 +138,9 @@ Response includes:
 - generated answer
 - model usage metadata
 - context bundle summary (bundle id, graph version, selected sources)
+- deterministic query signals extracted from the request (`query_signals`)
+- structured reference maps for agents (`reference_maps`) across projects, tasks, files, code, documents, and glossary terms
+- compaction metadata (`compaction`) describing token-aware pruning and duplicate collapse
 - context quality summary:
   - `quality` (`high|medium|low`)
   - `selected_nodes`, `average_score`, `coverage_ratio`
@@ -118,6 +152,8 @@ Resolver safety checks:
 - Invalid reason codes fail with `KNOWLEDGE_SELECTION_REASON_CODE_INVALID`.
 - Conflict precedence is deterministic; lower-ranked duplicates are excluded as `conflict_lost`.
 - Budget pruning is deterministic; pruned items are surfaced as `budget_exceeded` in explain mode.
+- Explicit references from tags, backticks, file paths, and common object phrases can surface as `explicit_reference` selections.
+- Duplicate context entries are compacted deterministically and surfaced as `compacted_duplicate` in explain mode.
 
 ## Access Behavior
 

@@ -7,6 +7,12 @@ Core now supports direct document upload for federated knowledge ingestion.
 - `POST /v1/knowledge/documents/upload`
 - Content type: `multipart/form-data`
 
+Additional retrieval endpoints:
+
+- `GET /v1/knowledge/documents?org_id=<org_id>&status=<status>&source_type=<type>&visibility_scope=<scope>&query=<text>&limit=<n>&cursor=<cursor>`
+- `GET /v1/knowledge/documents/{document_id}`
+- `GET /v1/knowledge/documents/{document_id}/content`
+
 ## Form Fields
 
 - `org_id` (required)
@@ -47,5 +53,19 @@ On upload, Core:
    - Plain/code text formats (`text/*`, `.txt`, `.md`, `.json`, `.csv`, `.py`, `.ts`, `.tsx`, `.js`, `.fs`, `.cs`)
 3. Creates a federated knowledge entity (`kind=document`) with pointer reference (`content_refs`) and extracted snippet.
 4. Returns saved entity and storage metadata.
+
+## Retrieval behavior
+
+- `GET /v1/knowledge/documents` returns visible document summaries for the current tenant/org/user scope.
+- Supported list filters:
+  - `org_id` (required)
+  - `status`
+  - `source_type`
+  - `visibility_scope`
+  - `query`
+  - `limit`
+  - `cursor`
+- `GET /v1/knowledge/documents/{document_id}` returns canonical entity metadata plus normalized document info.
+- `GET /v1/knowledge/documents/{document_id}/content` returns the stored file bytes using the original content type so clients can render PDF, CSV, markdown, or text directly.
 
 This enables sharing/reference across Council, Knowledger, AIDE, and other suite apps using the same ACL-governed resolver.

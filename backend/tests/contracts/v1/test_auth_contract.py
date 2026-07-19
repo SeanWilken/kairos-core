@@ -16,7 +16,16 @@ def _bootstrap_tenant(client: TestClient) -> None:
 
 def test_auth_register_login_refresh_me_contract() -> None:
     client = TestClient(app)
+    initial_status = client.get("/v1/auth/status")
+    assert initial_status.status_code == 200
+    assert initial_status.json()["data"]["tenant_configured"] is False
+    assert initial_status.json()["data"]["admin_configured"] is False
     _bootstrap_tenant(client)
+
+    tenant_status = client.get("/v1/auth/status", headers={"X-Tenant-ID": "tenant0"})
+    assert tenant_status.status_code == 200
+    assert tenant_status.json()["data"]["tenant_configured"] is True
+    assert tenant_status.json()["data"]["admin_configured"] is False
 
     register = client.post(
         "/v1/auth/register",
@@ -34,6 +43,25 @@ def test_auth_register_login_refresh_me_contract() -> None:
     assert register_body["error"] is None
     assert isinstance(register_body["data"]["access_token"], str)
     assert isinstance(register_body["data"]["refresh_token"], str)
+
+    locked_status = client.get("/v1/auth/status", headers={"X-Tenant-ID": "tenant0"})
+    assert locked_status.status_code == 200
+    assert locked_status.json()["data"]["admin_configured"] is True
+    assert locked_status.json()["data"]["login_required"] is True
+
+    second_admin = client.post(
+        "/v1/auth/register",
+        json={
+            "tenant_id": "tenant0",
+            "email": "second-admin@myai.dev",
+            "password": "Password123!",
+            "first_name": "Second",
+            "last_name": "Admin",
+            "is_global_admin": True,
+        },
+    )
+    assert second_admin.status_code == 403
+    assert second_admin.json()["error"]["details"]["reason_code"] == "AUTH_ADMIN_BOOTSTRAP_LOCKED"
 
     login = client.post(
         "/v1/auth/login",

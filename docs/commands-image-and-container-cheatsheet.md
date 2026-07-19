@@ -15,21 +15,50 @@ Examples:
 
 ## Common local image tags
 
-- `myaitech/myai-core-api:local`
-- `myaitech/myai-core-frontend:local`
-- `myaitech/myai-studio-frontend:local`
-- `myaitech/myai-council-frontend:local`
-- `myaitech/myai-de-api:local`
-- `myaitech/myai-de-frontend:local`
+- `myaitech/core-api:local`
+- `myaitech/core-frontend:local`
+- `myaitech/studio:local`
+- `myaitech/council:local`
+- `myaitech/aide-api:local`
+- `myaitech/aide-frontend:local`
+- `myaitech/knowledger:local`
 
 ## Build local images
+
+### Multi-repo helper (recommended)
+
+From `kairos-core/`:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action list
+```
+
+Build all mapped repos:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action build -Repos all -Engine podman
+```
+
+Build specific repos:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action build -Repos core-api,core-frontend,studio-frontend -Engine podman
+```
+
+Linux/Zorin:
+
+```bash
+bash ./scripts/multi-repo-workflow.sh --action list
+bash ./scripts/multi-repo-workflow.sh --action build --repos all --engine podman
+bash ./scripts/multi-repo-workflow.sh --action build --repos core-api,core-frontend,studio-frontend --engine podman
+```
 
 ### Core frontend
 
 From repo root:
 
 ```powershell
-podman build -t myaitech/myai-core-frontend:local ./frontend
+podman build -t myaitech/core-frontend:local ./frontend
 ```
 
 ### Core API
@@ -37,7 +66,7 @@ podman build -t myaitech/myai-core-frontend:local ./frontend
 From repo root:
 
 ```powershell
-podman build -t myaitech/myai-core-api:local ./backend
+podman build -t myaitech/core-api:local ./backend
 ```
 
 ### Studio frontend
@@ -45,7 +74,7 @@ podman build -t myaitech/myai-core-api:local ./backend
 From `../kairos-studio`:
 
 ```powershell
-podman build -t myaitech/myai-studio-frontend:local .
+podman build -t myaitech/studio:local .
 ```
 
 ### Council frontend
@@ -53,7 +82,7 @@ podman build -t myaitech/myai-studio-frontend:local .
 From the council repo:
 
 ```powershell
-podman build -t myaitech/myai-council-frontend:local .
+podman build -t myaitech/council:local .
 ```
 
 ### myAIDE API / frontend
@@ -61,13 +90,23 @@ podman build -t myaitech/myai-council-frontend:local .
 From their respective repos:
 
 ```powershell
-podman build -t myaitech/myai-de-api:local .
-podman build -t myaitech/myai-de-frontend:local .
+podman build -t myaitech/aide-api:local .
+podman build -t myaitech/aide-frontend:local .
 ```
 
 ## Local deploy flow (preserve data)
 
 From `myai-suite/`:
+
+Orchestrated from `kairos-core/`:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action deploy -Repos all -Engine podman
+```
+
+```bash
+bash ./scripts/multi-repo-workflow.sh --action deploy --repos all --engine podman
+```
 
 ### Deploy all active stack services
 
@@ -90,16 +129,34 @@ Behavior:
 
 ## Refresh containers after rebuilding local images
 
+### Multi-repo helper (recommended)
+
+Refresh all mapped repos into the suite:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action refresh -Repos all -Engine podman
+```
+
+```bash
+bash ./scripts/multi-repo-workflow.sh --action refresh --repos all --engine podman
+```
+
+Refresh only Studio and Council:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action refresh -Repos studio-frontend,council-frontend -Engine podman
+```
+
 ### Refresh just Studio
 
 ```powershell
-.\refresh-images.ps1 -ImagesCsv "myaitech/myai-studio-frontend:local" -ProfileSet suite
+.\refresh-images.ps1 -ImagesCsv "myaitech/studio:local" -ProfileSet suite
 ```
 
 ### Refresh just Core frontend
 
 ```powershell
-.\refresh-images.ps1 -ImagesCsv "myaitech/myai-core-frontend:local" -ProfileSet core
+.\refresh-images.ps1 -ImagesCsv "myaitech/core-frontend:local" -ProfileSet core
 ```
 
 ### Refresh whole active stack
@@ -136,7 +193,7 @@ This does not remove Postgres data.
 ### Show local image ID
 
 ```powershell
-podman image inspect myaitech/myai-studio-frontend:local --format "{{.Id}} {{.Created}}"
+podman image inspect myaitech/studio:local --format "{{.Id}} {{.Created}}"
 ```
 
 ### Show running container image
@@ -174,7 +231,7 @@ When a local image is ready for release, tag it with a non-local tag.
 Example:
 
 ```powershell
-podman tag myaitech/myai-studio-frontend:local myaitech/myai-studio-frontend:0.1.0
+podman tag myaitech/studio:local myaitech/studio:0.1.0
 ```
 
 You can also use:
@@ -185,6 +242,20 @@ You can also use:
 
 ## Push images to Docker Hub
 
+### Multi-repo helper (recommended)
+
+Publish all mapped repos with a shared release tag:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action publish -Repos all -Engine podman -PublishTag 0.1.0
+```
+
+Publish only selected repos:
+
+```powershell
+.\scripts\multi-repo-workflow.ps1 -Action publish -Repos core-api,core-frontend,studio-frontend -Engine podman -PublishTag 0.1.0
+```
+
 ### Log in
 
 ```powershell
@@ -194,18 +265,19 @@ podman login docker.io
 ### Push tagged image
 
 ```powershell
-podman push myaitech/myai-studio-frontend:0.1.0
+podman push myaitech/studio:0.1.0
 ```
 
 Example release pushes:
 
 ```powershell
-podman push myaitech/myai-core-api:0.1.0
-podman push myaitech/myai-core-frontend:0.1.0
-podman push myaitech/myai-studio-frontend:0.1.0
-podman push myaitech/myai-council-frontend:0.1.0
-podman push myaitech/myai-de-api:0.1.0
-podman push myaitech/myai-de-frontend:0.1.0
+podman push myaitech/core-api:0.1.0
+podman push myaitech/core-frontend:0.1.0
+podman push myaitech/studio:0.1.0
+podman push myaitech/council:0.1.0
+podman push myaitech/aide-api:0.1.0
+podman push myaitech/aide-frontend:0.1.0
+podman push myaitech/knowledger:0.1.0
 ```
 
 ## Helpful Git commands during release prep
@@ -256,12 +328,36 @@ Expected behavior now:
 - updated deploy scripts fail fast on compose deploy failure
 - migrations only run after successful container deployment
 
-### 4. Knowledger image missing
+### 4. KnowLedger local build dependency
 
 Current behavior:
 
-- `all` does not include Knowledger right now
-- use `knowledger` profile only when that image exists
+- `all` includes KnowLedger as part of the release baseline
+- `@myai-tech/myui@0.1.3-alpha.12` provides the required knowledge UI exports and stylesheet
+- KnowLedger builds from its own repository context with no sibling-worktree dependency
+
+### 5. Multi-repo script only covers known mapped repos
+
+Current mapped repo IDs:
+
+- `core-api`
+- `core-frontend`
+- `studio-frontend`
+- `council-frontend`
+- `aide-api`
+- `aide-frontend`
+- `knowledger-frontend`
+
+If a repo is not mapped yet, build/publish it manually or extend `scripts/multi-repo-workflow.ps1`.
+
+### 6. Preserve vs destroy data
+
+- preserve existing data:
+  - `.\scripts\multi-repo-workflow.ps1 -Action deploy -Repos all -Engine podman`
+- destroy volumes and reset data:
+  - `.\scripts\multi-repo-workflow.ps1 -Action reset-data -Repos all -Engine podman`
+
+The reset-data action removes named volumes for the selected profile set before redeploying.
 
 ## Recommended local release loop
 

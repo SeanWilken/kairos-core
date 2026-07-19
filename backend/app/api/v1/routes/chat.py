@@ -486,6 +486,14 @@ def _merge_persona_runtime(
     return data
 
 
+def _persona_voice_profile(persona: dict[str, Any]) -> dict[str, Any]:
+    data = persona.get("data", {}) if isinstance(persona.get("data"), dict) else {}
+    voice = data.get("voice", {}) if isinstance(data.get("voice"), dict) else {}
+    runtime = data.get("runtime", {}) if isinstance(data.get("runtime"), dict) else {}
+    runtime_voice = runtime.get("voice", {}) if isinstance(runtime.get("voice"), dict) else {}
+    return {**runtime_voice, **voice}
+
+
 def _validate_runtime_provider(*, tenant_id: str, org_id: str, provider_id: str | None) -> None:
     normalized = str(provider_id or "").strip().lower()
     if not normalized:
@@ -639,7 +647,7 @@ def list_personas(
             "reflection_prompt",
         ],
     }
-    enriched = [{**item, "chat_configuration": persona_chat_configuration} for item in filtered]
+    enriched = [{**item, "voice": _persona_voice_profile(item), "chat_configuration": persona_chat_configuration} for item in filtered]
     return ok_response(request, data={"items": enriched})
 
 
@@ -669,6 +677,7 @@ def get_persona(request: Request, persona_id: str) -> dict[str, Any]:
         request,
         data={
             **persona,
+            "voice": _persona_voice_profile(persona),
             "chat_configuration": {
                 "response_types": ["conversation", "markdown", "summary", "reporting"],
                 "modes": ["single_best", "council", "summarized", "threaded", "silent_head"],

@@ -1,21 +1,30 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app.core.auth_context import require_authentication
 from app.core.audit_store import audit_store
+from app.core.document_storage import document_storage
 from app.core.fallback_store import fallback_store
+from app.core.knowledge_contract_store import knowledge_contract_store
 from app.core.onboarding_store import onboarding_store
 from app.core.model_gateway_policy_store import model_gateway_policy_store
 from app.core.prompt_template_store import prompt_template_store
 from app.core.prompt_template_runtime import resolve_rendered_prompt_template
+from app.core.profile_presets import resolve_provider_preference
 from app.core.resume_adapter_policy_store import resume_adapter_policy_store
 from app.core.request_context import require_request_scope
 from app.core.response import ok_response
+from app.core.model_gateway import ModelRequest, model_gateway
 from app.core.tool_provider_registry import get_ai_provider_catalog, get_provider_models
+from app.core.voice_runtime import get_voice_runtime_status, synthesize_speech, transcribe_audio
 
 router = APIRouter(tags=["system"])
 
@@ -70,6 +79,29 @@ class PromptTemplateRenderPreviewPayload(BaseModel):
     context: dict[str, Any] = Field(default_factory=dict)
 
 
+class DirectProviderChatPayload(BaseModel):
+    profile_id: str | None = None
+    provider_id: str | None = None
+    model_id: str | None = None
+    system_prompt: str = ""
+    messages: list[dict[str, str]] = Field(default_factory=list)
+    model_profile: str = Field(default="balanced")
+
+
+class VoiceSynthesisPayload(BaseModel):
+    text: str = Field(min_length=1)
+    voice: str | None = None
+    format: str = Field(default="wav")
+    speed: float | None = None
+    pitch: float | None = None
+    gain_db: float | None = None
+    tone: str | None = None
+    cadence: str | None = None
+    stability: float | None = None
+    similarity_boost: float | None = None
+    style: float | None = None
+
+
 PROMPT_TEMPLATE_RUNTIME_KINDS = ["system_prompt"]
 PROMPT_TEMPLATE_EDITABLE_KINDS = [
     "system_prompt",
@@ -79,6 +111,127 @@ PROMPT_TEMPLATE_EDITABLE_KINDS = [
     "focus_group_prompt",
     "tasking_prompt",
 ]
+
+
+def _safe_json_value(raw: str | None, *, default: Any) -> Any:
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        return json.loads(raw)
+    except Exception:
+        return default
+
+
+def _persist_voice_transcript(
+    *,
+    tenant_id: str,
+    org_id: str,
+    user_id: str,
+    filename: str,
+    content_type: str,
+    audio: bytes,
+    transcript: dict[str, Any],
+    title: str | None,
+    summary: str,
+    tags_json: str | None,
+    visibility_json: str | None,
+    metadata_json: str | None,
+) -> dict[str, Any]:
+    tags = _safe_json_value(tags_json, default=[])
+    visibility = _safe_json_value(visibility_json, default={})
+    metadata = _safe_json_value(metadata_json, default={})
+    if not isinstance(tags, list):
+        tags = []
+    if not isinstance(visibility, dict):
+        visibility = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    if "scope" not in visibility:
+        visibility["scope"] = "org"
+    if "acl_policy_id" not in visibility:
+        visibility["acl_policy_id"] = "policy-org"
+
+    stored = document_storage.store(
+        tenant_id=tenant_id,
+        org_id=org_id,
+        filename=filename,
+        content_type=content_type,
+        content=audio,
+    )
+    now = datetime.now(UTC).isoformat()
+    transcript_text = str(transcript.get("text", "")).strip()
+    entity = {
+        "entity_id": str(uuid4()),
+        "kind": "knowledge_node",
+        "kind_schema_version": "v1",
+        "title": title or f"Voice Transcript {filename}",
+        "summary": summary or transcript_text[:240],
+        "tags": [str(item) for item in tags if str(item).strip()],
+        "contexts": [],
+        "facets": {"subtype": "voice_transcript"},
+        "owners": [{"owner_type": "user", "owner_id": user_id}],
+        "visibility": visibility,
+        "source": {
+            "source_system": "voice_stt",
+            "source_id": filename,
+            "external_ref": stored.uri,
+            "source_of_truth": True,
+            "dedupe_key": stored.object_key,
+        },
+        "content_refs": [
+            {
+                "ref_type": "uri",
+                "ref": stored.uri,
+                "snippet": transcript_text,
+                "checksum": "",
+            }
+        ],
+        "quality": {
+            "confidence": 0.9,
+            "verification_state": "derived",
+            "evidence_refs": [],
+        },
+        "lifecycle": {
+            "status": "active",
+            "effective_from": None,
+            "effective_to": None,
+            "staleness_ttl_seconds": 0,
+        },
+        "timestamps": {
+            "created_at": now,
+            "updated_at": now,
+            "observed_at": now,
+            "effective_from": None,
+            "effective_to": None,
+        },
+        "kind_payload": {
+            "subtype": "voice_transcript",
+            "filename": filename,
+            "content_type": content_type,
+            "size_bytes": stored.size_bytes,
+            "storage_backend": stored.storage_backend,
+            "transcript": transcript_text,
+            "stt_provider": transcript.get("provider", ""),
+            "language": transcript.get("language", ""),
+            "segments": transcript.get("segments", []),
+            "metadata": metadata,
+        },
+        "schema_version": "v1",
+    }
+    saved = knowledge_contract_store.upsert_entities(
+        tenant_id=tenant_id,
+        org_id=org_id,
+        items=[entity],
+    )
+    return {
+        "entity": saved[0],
+        "storage": {
+            "backend": stored.storage_backend,
+            "uri": stored.uri,
+            "object_key": stored.object_key,
+            "size_bytes": stored.size_bytes,
+        },
+    }
 
 
 @router.get("/system/status")
@@ -163,6 +316,138 @@ def get_ai_provider_models(
             },
         )
     return ok_response(request, data=result)
+
+
+@router.post("/system/ai/direct-chat")
+async def direct_provider_chat(request: Request, payload: DirectProviderChatPayload) -> dict[str, Any]:
+    auth = require_authentication(request)
+    provider_id, model_id = resolve_provider_preference(
+        profile_id=payload.profile_id,
+        capability="chat",
+        provider_id=payload.provider_id,
+        model_id=payload.model_id,
+    )
+    if not provider_id:
+        provider_id = "openai"
+    result = await model_gateway.generate_text(
+        ModelRequest(
+            system_prompt=payload.system_prompt,
+            conversation_messages=payload.messages,
+            model_profile=payload.model_profile,
+            provider_id=provider_id,
+            model_id=model_id,
+            tenant_id=auth.tenant_id,
+            org_id=auth.org_id,
+        )
+    )
+    return ok_response(
+        request,
+        data={
+            "profile_id": payload.profile_id,
+            "provider_id": provider_id,
+            "model_id": result.model,
+            "content": result.content,
+            "usage": result.usage,
+        },
+    )
+
+
+@router.get("/system/voice/status")
+def get_voice_status(request: Request) -> dict[str, Any]:
+    require_authentication(request)
+    return ok_response(request, data=get_voice_runtime_status())
+
+
+@router.post("/system/voice/stt")
+async def transcribe_voice(
+    request: Request,
+    file: UploadFile = File(...),
+    language: str | None = Form(default=None),
+    persist_to_knowledge: bool = Form(default=False),
+    org_id: str | None = Form(default=None),
+    title: str | None = Form(default=None),
+    summary: str = Form(default=""),
+    tags_json: str | None = Form(default=None),
+    visibility_json: str | None = Form(default=None),
+    metadata_json: str | None = Form(default=None),
+) -> dict[str, Any]:
+    auth = require_authentication(request, require_org=persist_to_knowledge)
+    audio = await file.read()
+    if not audio:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Uploaded audio is empty.",
+                "details": {"reason_code": "VOICE_STT_EMPTY_FILE"},
+            },
+        )
+    try:
+        result = transcribe_audio(audio_bytes=audio, filename=file.filename or "input.wav", language=language)
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": str(error),
+                "details": {"reason_code": "VOICE_STT_UNAVAILABLE"},
+            },
+        ) from error
+    data: dict[str, Any] = dict(result)
+    if persist_to_knowledge:
+        target_org_id = org_id or auth.org_id or ""
+        if not target_org_id:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Organization scope is required to persist transcript knowledge.",
+                    "details": {"reason_code": "ORG_SCOPE_REQUIRED"},
+                },
+            )
+        persisted = _persist_voice_transcript(
+            tenant_id=auth.tenant_id,
+            org_id=target_org_id,
+            user_id=auth.user_id,
+            filename=file.filename or "input.wav",
+            content_type=file.content_type or "application/octet-stream",
+            audio=audio,
+            transcript=result,
+            title=title,
+            summary=summary,
+            tags_json=tags_json,
+            visibility_json=visibility_json,
+            metadata_json=metadata_json,
+        )
+        data["knowledge_entity"] = persisted["entity"]
+        data["audio_storage"] = persisted["storage"]
+    return ok_response(request, data=data)
+
+
+@router.post("/system/voice/tts")
+def synthesize_voice(request: Request, payload: VoiceSynthesisPayload) -> Response:
+    require_authentication(request)
+    try:
+        audio, mime_type, filename = synthesize_speech(
+            text=payload.text,
+            voice=payload.voice,
+            output_format=payload.format,
+            speed=payload.speed,
+            pitch=payload.pitch,
+            gain_db=payload.gain_db,
+            tone=payload.tone,
+            cadence=payload.cadence,
+            stability=payload.stability,
+            similarity_boost=payload.similarity_boost,
+            style=payload.style,
+        )
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "message": str(error),
+                "details": {"reason_code": "VOICE_TTS_UNAVAILABLE"},
+            },
+        ) from error
+    headers = {"Content-Disposition": f'inline; filename="{filename}"'}
+    return Response(content=audio, media_type=mime_type, headers=headers)
 
 
 @router.get("/system/audit/events")

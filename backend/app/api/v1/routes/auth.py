@@ -11,7 +11,7 @@ from app.core.auth_context import require_authentication
 from app.core.auth_store import auth_store
 from app.core.config import get_settings
 from app.core.db import SessionLocal
-from app.core.db_models import TenantModel
+from app.core.db_models import StudioUserModel, TenantModel
 from app.core.response import ok_response
 from app.core.security import (
     decode_jwt,
@@ -51,6 +51,36 @@ class RefreshPayload(BaseModel):
 
 class ContextSwitchPayload(BaseModel):
     org_id: str = Field(min_length=1)
+
+
+@router.get("/status")
+def auth_status(request: Request) -> dict[str, Any]:
+    settings = get_settings()
+    requested_tenant_id = request.headers.get("X-Tenant-ID") or settings.install_tenant_id or ""
+    with SessionLocal() as db:
+        tenants = db.scalars(select(TenantModel).order_by(TenantModel.created_at.asc()).limit(2)).all()
+        tenant = next((item for item in tenants if item.tenant_id == requested_tenant_id), None)
+        if tenant is None and len(tenants) == 1:
+            tenant = tenants[0]
+        admin = None
+        if tenant is not None:
+            admin = db.scalar(
+                select(StudioUserModel)
+                .where(StudioUserModel.tenant_id == tenant.tenant_id)
+                .where(StudioUserModel.is_global_admin.is_(True))
+                .limit(1)
+            )
+    tenant_configured = tenant is not None
+    admin_configured = admin is not None
+    return ok_response(
+        request,
+        data={
+            "tenant_configured": tenant_configured,
+            "tenant_id": tenant.tenant_id if tenant is not None else None,
+            "admin_configured": admin_configured,
+            "login_required": admin_configured,
+        },
+    )
 
 
 def _resolve_tenant(request: Request, payload_tenant: str | None) -> str:
@@ -125,6 +155,23 @@ def _token_pair_for_user(
 def register(request: Request, payload: RegisterPayload) -> dict[str, Any]:
     tenant_id = _resolve_tenant(request, payload.tenant_id)
     org_id = payload.org_id
+
+    if payload.is_global_admin:
+        with SessionLocal() as db:
+            existing_admin = db.scalar(
+                select(StudioUserModel.user_id)
+                .where(StudioUserModel.tenant_id == tenant_id)
+                .where(StudioUserModel.is_global_admin.is_(True))
+                .limit(1)
+            )
+        if existing_admin is not None:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "message": "Initial administrator registration is locked.",
+                    "details": {"reason_code": "AUTH_ADMIN_BOOTSTRAP_LOCKED"},
+                },
+            )
 
     if not payload.is_global_admin and not org_id:
         org_header = request.headers.get("X-Org-ID")

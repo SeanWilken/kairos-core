@@ -8,6 +8,7 @@ from app.api.v1.routes.ingest import router as ingest_router
 from app.api.v1.routes.persona_config import router as persona_config_router
 from app.api.v1.routes.knowledge import router as knowledge_router
 from app.api.v1.routes.context_contract import router as context_contract_router
+from app.api.v1.routes.development import router as development_router
 from app.api.v1.routes.protected import router as protected_router
 from app.api.v1.routes.realtime import router as realtime_router
 from app.api.v1.routes.reviews import router as reviews_router
@@ -29,6 +30,7 @@ v1_router.include_router(chat_router)
 v1_router.include_router(persona_config_router)
 v1_router.include_router(knowledge_router)
 v1_router.include_router(context_contract_router)
+v1_router.include_router(development_router)
 v1_router.include_router(reviews_router)
 v1_router.include_router(realtime_router)
 v1_router.include_router(tools_router)

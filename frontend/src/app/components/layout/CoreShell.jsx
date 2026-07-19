@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@myai-tech/myui";
+import { clearCoreTokens } from "../../../lib/api/client";
 
 const navigation = [
   { name: "Core Setup", href: "/" },
@@ -73,7 +74,15 @@ export function MyAIShell() {
                 Admin Reset
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="myai-overlay-item">Sign Out</DropdownMenuItem>
+              <DropdownMenuItem
+                className="myai-overlay-item"
+                onSelect={() => {
+                  clearCoreTokens();
+                  window.location.assign("/");
+                }}
+              >
+                Sign Out
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

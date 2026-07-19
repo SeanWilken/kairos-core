@@ -1337,16 +1337,96 @@ class KnowledgeRelationshipModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "org_id",
-            "from_entity_id",
-            "to_entity_id",
-            "relationship_type",
-            name="uq_knowledge_relationships_relation",
-        ),
+
+class StudioWorkflowDefinitionModel(Base):
+    __tablename__ = "studio_workflow_definitions"
+
+    workflow_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    spec_version: Mapped[str] = mapped_column(Text, nullable=False, default="v0.3")
+    trigger_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    nodes_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    edges_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    logic_rules_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    policy_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "org_id", "name", name="uq_studio_workflow_definitions_org_name"),
+    )
+
+
+class WorkflowRunModel(Base):
+    __tablename__ = "workflow_runs"
+
+    run_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_workflow_definitions.workflow_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="running", index=True)
+    artifact_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    review_context_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    matched_rules_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class WorkflowReviewQueueModel(Base):
+    __tablename__ = "workflow_review_queue"
+
+    review_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("studio_workflow_definitions.workflow_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    node_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", index=True)
+    reason_code: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    requested_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    resolved_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    context_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class WorkspaceRecordModel(Base):

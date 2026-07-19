@@ -136,10 +136,10 @@ export function StepDeployment({ state, update }: StepProps) {
                 <Input
                   value={state.core_api_custom_image}
                   onChange={(e) => update({ core_api_custom_image: e.target.value })}
-                  placeholder="myaitech/myai-core-api:tag"
+                  placeholder="myaitech/core-api:tag"
                   className="font-mono text-xs"
                 />
-                <p className="text-xs text-zinc-500">Examples: `myaitech/myai-core-api:stable`, `myaitech/myai-de-api:stable`. If private, ensure Docker/Podman CLI is already authenticated to your registry.</p>
+                <p className="text-xs text-zinc-500">Examples: `myaitech/core-api:stable`, `myaitech/aide-api:stable`. If private, ensure Docker/Podman CLI is already authenticated to your registry.</p>
               </div>
             )}
           </div>

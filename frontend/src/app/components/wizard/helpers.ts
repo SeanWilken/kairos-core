@@ -251,7 +251,7 @@ export async function runRuntimeChecks(state: WizardState): Promise<{ results: C
 
 export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
   const primaryApiConn = state.connections.find((c) => c.mode === "api_provider") ?? null;
-  const defaultStableImage = "myaitech/myai-core-api:stable";
+  const defaultStableImage = "myaitech/core-api:stable";
   const selectedCoreImage =
     state.core_api_runtime_mode === "custom_image"
       ? state.core_api_custom_image.trim() || "your-registry/your-core-api:tag"
@@ -266,29 +266,29 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
   env += `CORE_API_IMAGE=${selectedCoreImage}\n\n`;
   if (state.infra_components.includes("myai_de_api")) {
     env += "# Optional myAIDE server\n";
-    env += "MYAI_DE_API_IMAGE=myaitech/myai-de-api:local\n";
+    env += "MYAI_DE_API_IMAGE=myaitech/aide-api:local\n";
     env += "MYAI_DE_API_PORT=8010\n\n";
   }
   if (state.frontend_services.length) {
     env += "# Frontend images\n";
     if (state.frontend_services.includes("myai_core_frontend")) {
-      env += "CORE_FRONTEND_IMAGE=myaitech/myai-core-frontend:local\n";
+      env += "CORE_FRONTEND_IMAGE=myaitech/core-frontend:local\n";
       env += "CORE_FRONTEND_PORT=8080\n";
     }
     if (state.frontend_services.includes("myai_studio_frontend")) {
-      env += "STUDIO_FRONTEND_IMAGE=myaitech/myai-studio-frontend:local\n";
+      env += "STUDIO_FRONTEND_IMAGE=myaitech/studio:local\n";
       env += "STUDIO_FRONTEND_PORT=8081\n";
     }
     if (state.frontend_services.includes("myai_council_frontend")) {
-      env += "COUNCIL_FRONTEND_IMAGE=myaitech/myai-council-frontend:local\n";
+      env += "COUNCIL_FRONTEND_IMAGE=myaitech/council:local\n";
       env += "COUNCIL_FRONTEND_PORT=8082\n";
     }
     if (state.frontend_services.includes("myai_de_frontend")) {
-      env += "MYAI_DE_FRONTEND_IMAGE=myaitech/myai-de-frontend:local\n";
+      env += "MYAI_DE_FRONTEND_IMAGE=myaitech/aide-frontend:local\n";
       env += "MYAI_DE_FRONTEND_PORT=8083\n";
     }
     if (state.frontend_services.includes("myai_knowledger_frontend")) {
-      env += "MYAI_KNOWLEDGER_FRONTEND_IMAGE=myaitech/myai-knowledger-frontend:local\n";
+      env += "MYAI_KNOWLEDGER_FRONTEND_IMAGE=myaitech/knowledger:local\n";
       env += "MYAI_KNOWLEDGER_FRONTEND_PORT=8084\n";
     }
     env += "\n";
@@ -339,7 +339,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
       compose += "      dockerfile: Dockerfile\n";
       compose += "    image: ${CORE_API_IMAGE}\n";
       compose += "    env_file: .env\n";
-      compose += "    profiles: [\"core\", \"suite\", \"all\"]\n";
+      compose += "    profiles: [\"core\", \"suite\", \"knowledger\", \"all\"]\n";
       compose += "    ports:\n";
       compose += "      - \"${CORE_API_PORT:-8000}:8000\"\n";
       compose += "    restart: unless-stopped\n";
@@ -350,7 +350,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
       compose += "\n  core_api:\n";
       compose += "    image: ${CORE_API_IMAGE}\n";
       compose += "    env_file: .env\n";
-      compose += "    profiles: [\"core\", \"suite\", \"all\"]\n";
+      compose += "    profiles: [\"core\", \"suite\", \"knowledger\", \"all\"]\n";
       compose += "    ports:\n";
       compose += "      - \"${CORE_API_PORT:-8000}:8000\"\n";
       compose += "    restart: unless-stopped\n";
@@ -362,7 +362,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
 
   if (state.infra_components.includes("myai_de_api")) {
     compose += "\n  myai_de_api:\n";
-    compose += "    image: ${MYAI_DE_API_IMAGE:-myaitech/myai-de-api:stable}\n";
+    compose += "    image: ${MYAI_DE_API_IMAGE:-myaitech/aide-api:stable}\n";
     compose += "    env_file: .env\n";
     compose += "    profiles: [\"de\", \"all\"]\n";
     compose += "    ports:\n";
@@ -375,35 +375,35 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
 
   const frontendMap: Record<string, { image: string; port: string; containerName: string; apiUrl: string; dependsOn: string }> = {
     myai_core_frontend: {
-      image: "${CORE_FRONTEND_IMAGE:-myaitech/myai-core-frontend:local}",
+      image: "${CORE_FRONTEND_IMAGE:-myaitech/core-frontend:local}",
       port: "${CORE_FRONTEND_PORT:-8080}",
       containerName: "myai-core-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
     },
     myai_studio_frontend: {
-      image: "${STUDIO_FRONTEND_IMAGE:-myaitech/myai-studio-frontend:local}",
+      image: "${STUDIO_FRONTEND_IMAGE:-myaitech/studio:local}",
       port: "${STUDIO_FRONTEND_PORT:-8081}",
       containerName: "myai-studio-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
     },
     myai_council_frontend: {
-      image: "${COUNCIL_FRONTEND_IMAGE:-myaitech/myai-council-frontend:local}",
+      image: "${COUNCIL_FRONTEND_IMAGE:-myaitech/council:local}",
       port: "${COUNCIL_FRONTEND_PORT:-8082}",
       containerName: "myai-council-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
       dependsOn: "core_api",
     },
     myai_de_frontend: {
-      image: "${MYAI_DE_FRONTEND_IMAGE:-myaitech/myai-de-frontend:local}",
+      image: "${MYAI_DE_FRONTEND_IMAGE:-myaitech/aide-frontend:local}",
       port: "${MYAI_DE_FRONTEND_PORT:-8083}",
       containerName: "myai-de-frontend",
       apiUrl: "http://localhost:${MYAI_DE_API_PORT:-8010}",
       dependsOn: "myai_de_api",
     },
     myai_knowledger_frontend: {
-      image: "${MYAI_KNOWLEDGER_FRONTEND_IMAGE:-myaitech/myai-knowledger-frontend:local}",
+      image: "${MYAI_KNOWLEDGER_FRONTEND_IMAGE:-myaitech/knowledger:local}",
       port: "${MYAI_KNOWLEDGER_FRONTEND_PORT:-8084}",
       containerName: "myai-knowledger-frontend",
       apiUrl: "http://localhost:${CORE_API_PORT:-8000}",
@@ -433,7 +433,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
     if (serviceId === "myai_core_frontend") compose += "    profiles: [\"core\", \"all\"]\n";
     if (serviceId === "myai_studio_frontend" || serviceId === "myai_council_frontend") compose += "    profiles: [\"suite\", \"all\"]\n";
     if (serviceId === "myai_de_frontend") compose += "    profiles: [\"de\", \"all\"]\n";
-    if (serviceId === "myai_knowledger_frontend") compose += "    profiles: [\"knowledger\"]\n";
+    if (serviceId === "myai_knowledger_frontend") compose += "    profiles: [\"knowledger\", \"all\"]\n";
     compose += "    environment:\n";
     compose += `      MYAI_CORE_API_URL: ${resolvedApiUrl}\n`;
     compose += `      MYAI_CORE_API_BASE_URL: ${resolvedApiUrl}\n`;
@@ -495,6 +495,7 @@ myai-core/
 - \`check-runtime.sh\` / \`check-runtime.ps1\`: checks Core health endpoint and prints runtime-status endpoint guidance.
 - SQL files in \`migrations/\` are auto-applied on first postgres boot (in lexical filename order).
 - If you rebuild \`:local\` images during development, make sure \`CONTAINER_ENGINE\` matches the engine where those images were built (for example \`docker\` on Windows if you built with Docker Desktop).
+- \`../scripts/multi-repo-workflow.sh\` / \`../scripts/multi-repo-workflow.ps1\`: orchestrates building, refreshing, deploying, resetting, and publishing across mapped sibling repos.
 
 ## Core runtime options
 - local source mode: build and run Core from this repository backend Dockerfile.
@@ -514,6 +515,71 @@ myai-core/
    - PowerShell: \`.\\check-runtime.ps1\`
 6. Continue to document ingest only after required checks pass.
 
+## Updating local images during development
+
+### Multi-repo helper (recommended from \`kairos-core/\`)
+
+- List mapped repos:
+  - \`bash ./scripts/multi-repo-workflow.sh --action list\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action list\`
+- Build all mapped repos:
+  - \`bash ./scripts/multi-repo-workflow.sh --action build --repos all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action build -Repos all -Engine podman\`
+- Refresh all mapped repos into the suite:
+  - \`bash ./scripts/multi-repo-workflow.sh --action refresh --repos all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action refresh -Repos all -Engine podman\`
+- Deploy while preserving volumes:
+  - \`bash ./scripts/multi-repo-workflow.sh --action deploy --repos all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action deploy -Repos all -Engine podman\`
+- Destroy data volumes and start clean:
+  - \`bash ./scripts/multi-repo-workflow.sh --action reset-data --repos all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action reset-data -Repos all -Engine podman\`
+
+### Refresh a rebuilt local image into the running stack
+
+- Council frontend:
+  - \`.\\refresh-images.ps1 -ImagesCsv "myaitech/council:local" -ProfileSet suite\`
+- Studio frontend:
+  - \`.\\refresh-images.ps1 -ImagesCsv "myaitech/studio:local" -ProfileSet suite\`
+- Core frontend:
+  - \`.\\refresh-images.ps1 -ImagesCsv "myaitech/core-frontend:local" -ProfileSet core\`
+
+### Build sibling frontend repos (not included in this repo)
+
+- From \`../kairos-council\`:
+  - \`podman build -t myaitech/council:local .\`
+- From \`../kairos-studio\`:
+  - \`podman build -t myaitech/studio:local .\`
+
+### Build included repos/components from this repository
+
+- From repo root for Core API:
+  - \`podman build -t myaitech/core-api:local ./backend\`
+- From repo root for Core frontend:
+  - \`podman build -t myaitech/core-frontend:local ./frontend\`
+
+### Preserve data while updating
+
+- Preferred:
+  - \`.\\deploy.ps1 -ProfileSet all\`
+- Or rebuild/recreate only targeted services with the refresh script.
+
+### Destroy volumes and reset local state completely
+
+Run from \`myai-suite/\`:
+
+\`\`\`powershell
+podman compose --profile all down -v
+\`\`\`
+
+Then start fresh again with:
+
+\`\`\`powershell
+.\\deploy.ps1 -ProfileSet all
+\`\`\`
+
+This removes Postgres and other named volume data.
+
 ## Deploy workflow (preserve data)
 - Deploy everything and keep existing Postgres data: \`./deploy.sh all\`
 - Deploy + pull latest images first: \`./deploy.sh all true\`
@@ -529,7 +595,8 @@ myai-core/
 - Optional frontend services are included only when selected in the Frontends step.
 - Profile sets: \`core\`, \`suite\`, \`de\`, \`knowledger\`, or \`all\`.
 - \`myai_de_frontend\` uses \`myai_de_api\` when that service is enabled, otherwise it falls back to \`core_api\`.
-- \`all\` currently covers the active Core + Suite + DE stack. Knowledger remains opt-in via the \`knowledger\` profile until that image exists.
+- \`all\` covers the release baseline: Core, Studio, Council, MyAIDE API/frontend, and KnowLedger.
+- The standalone \`knowledger\` profile remains available for targeted refresh/deploy operations.
 
 ## Session resume
 - Runtime checks and ingest use a bootstrap \`session_id\`.
@@ -569,10 +636,10 @@ if [ ! -f .env ]; then
 fi
 
 if [ "$REFRESH" -eq 1 ]; then
-  $ENGINE compose --profile "$PROFILE_SET" pull || true
+  "$ENGINE" compose --profile "$PROFILE_SET" pull || true
 fi
 
-$ENGINE compose --profile "$PROFILE_SET" up -d --remove-orphans
+"$ENGINE" compose --profile "$PROFILE_SET" up -d --remove-orphans
 
 echo "Infrastructure started with $ENGINE compose (profile: $PROFILE_SET)."
 if [ "$CORE_MODE" = "local_source" ]; then
@@ -662,7 +729,7 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
-CONFIG_JSON="$($ENGINE compose --profile "$PROFILE_SET" config --format json)"
+CONFIG_JSON="$("$ENGINE" compose --profile "$PROFILE_SET" config --format json)"
 
 is_local_tag() {
   case "$1" in
@@ -683,12 +750,12 @@ if [ -n "$IMAGES_CSV" ]; then
       echo "Skipping pull for local tag $image_trimmed"
     else
       echo "Pulling $image_trimmed"
-      if ! $ENGINE pull "$image_trimmed"; then
+      if ! "$ENGINE" pull "$image_trimmed"; then
         echo "Pull failed for $image_trimmed; continuing with recreate."
       fi
     fi
 
-    SERVICE_MATCHES="$(printf '%s' "$CONFIG_JSON" | python -c "import json,sys; cfg=json.load(sys.stdin); target=sys.argv[1]; out=[name for name,svc in cfg.get('services',{}).items() if str(svc.get('image','')).strip()==target]; print(' '.join(out))" "$image_trimmed")"
+    SERVICE_MATCHES="$(printf '%s' "$CONFIG_JSON" | python3 -c "import json,sys; cfg=json.load(sys.stdin); target=sys.argv[1]; out=[name for name,svc in cfg.get('services',{}).items() if str(svc.get('image','')).strip()==target]; print(' '.join(out))" "$image_trimmed")"
     if [ -n "$SERVICE_MATCHES" ]; then
       MATCHED_SERVICES="$MATCHED_SERVICES $SERVICE_MATCHES"
     fi
@@ -697,18 +764,18 @@ if [ -n "$IMAGES_CSV" ]; then
   MATCHED_SERVICES="$(echo "$MATCHED_SERVICES" | xargs)"
   if [ -n "$MATCHED_SERVICES" ]; then
     echo "Recreating services: $MATCHED_SERVICES"
-    $ENGINE compose --profile "$PROFILE_SET" up -d --no-deps --force-recreate $MATCHED_SERVICES
+    "$ENGINE" compose --profile "$PROFILE_SET" up -d --no-deps --force-recreate $MATCHED_SERVICES
   else
     echo "No services matched requested images for profile $PROFILE_SET"
   fi
 else
-  REMOTE_IMAGES="$(printf '%s' "$CONFIG_JSON" | python -c "import json,sys; cfg=json.load(sys.stdin); imgs=sorted({str(svc.get('image','')).strip() for svc in cfg.get('services',{}).values() if str(svc.get('image','')).strip() and not str(svc.get('image','')).strip().endswith(':local')}); print('\\n'.join(imgs))")"
+  REMOTE_IMAGES="$(printf '%s' "$CONFIG_JSON" | python3 -c "import json,sys; cfg=json.load(sys.stdin); imgs=sorted({str(svc.get('image','')).strip() for svc in cfg.get('services',{}).values() if str(svc.get('image','')).strip() and not str(svc.get('image','')).strip().endswith(':local')}); print('\\n'.join(imgs))")"
 
   if [ -n "$REMOTE_IMAGES" ]; then
     while IFS= read -r image; do
       [ -z "$image" ] && continue
       echo "Pulling $image"
-      if ! $ENGINE pull "$image"; then
+      if ! "$ENGINE" pull "$image"; then
         echo "Pull failed for $image; continuing with recreate."
       fi
     done <<EOF
@@ -716,7 +783,7 @@ $REMOTE_IMAGES
 EOF
   fi
 
-  $ENGINE compose --profile "$PROFILE_SET" up -d --force-recreate --remove-orphans
+  "$ENGINE" compose --profile "$PROFILE_SET" up -d --force-recreate --remove-orphans
 fi
 `;
 
@@ -807,16 +874,16 @@ fi
 
 if [ "$REFRESH_IMAGES" = "true" ]; then
   echo "Pulling images for profile set: $PROFILE_SET"
-  if ! $ENGINE compose --profile "$PROFILE_SET" pull; then
+  if ! "$ENGINE" compose --profile "$PROFILE_SET" pull; then
     echo "Pull reported failures. Continuing so local/buildable images can still be deployed."
   fi
 fi
 
 echo "Deploying services for profile set: $PROFILE_SET"
-$ENGINE compose --profile "$PROFILE_SET" up -d --build --force-recreate --remove-orphans
+"$ENGINE" compose --profile "$PROFILE_SET" up -d --build --force-recreate --remove-orphans
 
 echo "Applying SQL migrations (data-preserving)..."
-$ENGINE compose exec -T postgres sh -lc 'set -e; for f in /docker-entrypoint-initdb.d/*.sql; do echo "Applying $f"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"; done'
+"$ENGINE" compose exec -T postgres sh -lc 'set -e; for f in /docker-entrypoint-initdb.d/*.sql; do echo "Applying $f"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"; done'
 
 echo "Deployment complete. Containers refreshed, volumes preserved."
 `;
