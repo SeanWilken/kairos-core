@@ -9,7 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from app.core.auth_context import require_authentication
+from app.core.auth_context import require_authentication, require_org_access
 from app.core.audit_store import audit_store
 from app.core.document_storage import document_storage
 from app.core.fallback_store import fallback_store
@@ -453,13 +453,26 @@ def synthesize_voice(request: Request, payload: VoiceSynthesisPayload) -> Respon
 @router.get("/system/audit/events")
 def list_audit_events(
     request: Request,
+    org_id: str | None = None,
     room_id: str | None = None,
     orchestration_run_id: str | None = None,
     limit: int = 100,
 ) -> dict[str, Any]:
     auth = require_authentication(request)
+    target_org_id = str(org_id or auth.org_id or "").strip()
+    if target_org_id:
+        require_org_access(auth, org_id=target_org_id)
+    elif not auth.is_global_admin:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Organization scope is required for audit access.",
+                "details": {"reason_code": "ORG_SCOPE_REQUIRED"},
+            },
+        )
     items = audit_store.list_events(
         tenant_id=auth.tenant_id,
+        org_id=target_org_id or None,
         room_id=room_id,
         orchestration_run_id=orchestration_run_id,
         limit=max(1, min(limit, 500)),

@@ -6,6 +6,7 @@
 - `docs/architecture/repo-charter.md`
 - `docs/architecture/ai-governance-and-safety.md`
 - `docs/architecture/policy-override-governance-v0.1.md`
+- `docs/architecture/deployment-control-plane-v0.1.md`
 
 ## Ecosystem and inter-repo standards
 
@@ -32,6 +33,11 @@
 - `docs/internal/development-plane-capability-matrix.md`
 - `docs/internal/core-current-status-and-roadmap.md`
 - `docs/internal/myaide-tool-and-capability-core-requirements.md`
+
+## Development environments
+
+- `docs/linux-development-environment.md`
+- `docs/workspace-orchestration-helper.md`
 
 ## ADR placeholders
 

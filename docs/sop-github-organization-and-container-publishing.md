@@ -176,21 +176,21 @@ From `kairos-core`, list the canonical build map:
 Build every baseline image:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action build -Repos all -Engine podman -LocalTag local
+.\scripts\multi-repo-workflow.ps1 -Action build -Targets all -Engine podman -SourceTag local
 ```
 
 Build selected images:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action build -Repos "core-api,core-frontend" -Engine podman -LocalTag local
+.\scripts\multi-repo-workflow.ps1 -Action build -Targets "core-api,core-frontend" -Engine podman -SourceTag local
 ```
 
 Linux/Zorin equivalents:
 
 ```bash
 bash ./scripts/multi-repo-workflow.sh --action list
-bash ./scripts/multi-repo-workflow.sh --action build --repos all --engine podman --local-tag local
-bash ./scripts/multi-repo-workflow.sh --action build --repos core-api,core-frontend --engine podman --local-tag local
+bash ./scripts/multi-repo-workflow.sh --action build --targets all --engine podman --source-tag local
+bash ./scripts/multi-repo-workflow.sh --action build --targets core-api,core-frontend --engine podman --source-tag local
 ```
 
 The mapped IDs are:
@@ -241,13 +241,13 @@ Use one version across all images participating in the same suite release.
 
 ```powershell
 $Version = "0.1.0-rc.1"
-.\scripts\multi-repo-workflow.ps1 -Action publish -Repos all -Engine podman -LocalTag local -PublishTag $Version
+.\scripts\multi-repo-workflow.ps1 -Action publish -Targets all -Engine podman -SourceTag local -ReleaseTag $Version
 ```
 
 For one repository:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action publish -Repos "core-api,core-frontend" -Engine podman -LocalTag local -PublishTag $Version
+.\scripts\multi-repo-workflow.ps1 -Action publish -Targets "core-api,core-frontend" -Engine podman -SourceTag local -ReleaseTag $Version
 ```
 
 The publish action tags each `:local` image with the requested immutable version and pushes it to Docker Hub.
@@ -256,7 +256,7 @@ Linux/Zorin equivalent:
 
 ```bash
 VERSION=0.1.0-rc.1
-bash ./scripts/multi-repo-workflow.sh --action publish --repos all --engine podman --local-tag local --publish-tag "$VERSION"
+bash ./scripts/multi-repo-workflow.sh --action publish --targets all --engine podman --source-tag local --release-tag "$VERSION"
 ```
 
 ## Phase 10: Test the published suite

@@ -41,6 +41,7 @@ def test_development_workspace_and_runner_capabilities_contract() -> None:
                 "runner_id": "runner_local_01",
                 "repo_name": "project-a",
                 "repo_root": "C:/code/project-a",
+                "orchestration_manifest": "C:/code/project-a/scripts/workspace-manifest.v1.json",
                 "primary_language": "python",
             },
         },
@@ -85,6 +86,16 @@ def test_development_workspace_and_runner_capabilities_contract() -> None:
     assert "workspace.code_index" in keys
     assert "language.python.lsp" in keys
     assert "repo.status" in keys
+    assert "workspace.pipeline.run" in keys
+    assert "repo.sync" in keys
+    assert "container.images.refresh" in keys
+    assert "container.stack.deploy" in keys
+    assert "database.migrations.status" in keys
+    assert "database.migrations.apply" in keys
+    assert workspace_data["summary"]["orchestration_manifest"].endswith("workspace-manifest.v1.json")
+    by_key = {item["key"]: item for item in workspace_data["capabilities"]}
+    assert by_key["workspace.pipeline.run"]["status"] == "degraded"
+    assert by_key["workspace.pipeline.run"]["provenance"]["attestation_required"] is True
 
     runner_caps = client.get("/v1/development/runners/runner_local_01/capabilities", headers=headers)
     assert runner_caps.status_code == 200
@@ -148,6 +159,17 @@ def test_development_capability_resolution_contract() -> None:
     assert by_key["language.python.lsp"]["resolution"] == "install_required"
     assert by_key["workspace.patch.apply"]["status"] == "blocked_by_policy"
     assert by_key["repo.checkout"]["resolution"] == "proposal_only"
+
+    proposal_only = client.post(
+        "/v1/development/capabilities/resolve",
+        headers=headers,
+        json={
+            "workspace_id": workspace_id,
+            "required_capabilities": ["repo.checkout"],
+        },
+    )
+    assert proposal_only.status_code == 200
+    assert proposal_only.json()["data"]["allow"] is False
 
 
 def test_development_policy_check_contract() -> None:

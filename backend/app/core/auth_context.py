@@ -156,3 +156,54 @@ def require_roles(context: AuthContext, allowed: set[str]) -> None:
             "details": {"reason_code": "ROLE_FORBIDDEN", "required": sorted(allowed)},
         },
     )
+
+
+def require_org_access(
+    context: AuthContext,
+    *,
+    org_id: str,
+    allowed_roles: set[str] | None = None,
+    require_scoped_context: bool = False,
+) -> dict:
+    if require_scoped_context and context.org_id != org_id:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Authenticated organization scope does not match the requested organization.",
+                "details": {"reason_code": "ORG_SCOPE_FORBIDDEN"},
+            },
+        )
+    organization = studio_store.get_organization(tenant_id=context.tenant_id, org_id=org_id)
+    if organization is None:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": "Organization not found.",
+                "details": {"reason_code": "ORGANIZATION_NOT_FOUND"},
+            },
+        )
+    if context.is_global_admin:
+        return organization
+    membership = studio_store.get_membership_by_org_user(
+        tenant_id=context.tenant_id,
+        org_id=org_id,
+        user_id=context.user_id,
+    )
+    if membership is None or str(membership.get("status", "")).lower() != "active":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Active organization membership is required.",
+                "details": {"reason_code": "ORG_SCOPE_FORBIDDEN"},
+            },
+        )
+    role = str(membership.get("role", "")).strip()
+    if allowed_roles and role not in allowed_roles:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "message": "Insufficient organization role for this action.",
+                "details": {"reason_code": "ROLE_FORBIDDEN", "required": sorted(allowed_roles)},
+            },
+        )
+    return organization

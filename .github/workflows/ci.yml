@@ -37,6 +37,12 @@ jobs:
       - name: Run backend checks
         run: bun run check:backend
 
+      - name: Test workspace and migration helpers
+        run: bun test scripts/workspace-helper.test.mjs scripts/migration-helper.test.mjs
+
+      - name: Smoke-test workspace wrapper
+        run: bash scripts/multi-repo-workflow.sh --action list --json
+
       - name: Enforce changelog update on PRs
         if: github.event_name == 'pull_request'
         run: node scripts/check-changelog-ci.mjs

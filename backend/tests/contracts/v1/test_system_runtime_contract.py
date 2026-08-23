@@ -259,7 +259,7 @@ def test_system_voice_tts_contract() -> None:
 
 def test_system_audit_events_contract() -> None:
     client = TestClient(app)
-    auth_headers = register_and_login(client, scope_org_id="org0")
+    auth_headers = register_and_login(client)
 
     response = client.get("/v1/system/audit/events", headers=auth_headers)
     assert response.status_code == 200

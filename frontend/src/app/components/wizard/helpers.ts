@@ -268,6 +268,9 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
     env += "# Optional myAIDE server\n";
     env += "MYAI_DE_API_IMAGE=myaitech/aide-api:local\n";
     env += "MYAI_DE_API_PORT=8010\n\n";
+    env += "MYAIDE_AUTH_MODE=core\n";
+    env += "CORE_BASE_URL=http://core_api:8000\n";
+    env += `CORE_TENANT_ID=${installTenantId}\n\n`;
   }
   if (state.frontend_services.length) {
     env += "# Frontend images\n";
@@ -339,7 +342,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
       compose += "      dockerfile: Dockerfile\n";
       compose += "    image: ${CORE_API_IMAGE}\n";
       compose += "    env_file: .env\n";
-      compose += "    profiles: [\"core\", \"suite\", \"knowledger\", \"all\"]\n";
+      compose += "    profiles: [\"core\", \"suite\", \"de\", \"knowledger\", \"all\"]\n";
       compose += "    ports:\n";
       compose += "      - \"${CORE_API_PORT:-8000}:8000\"\n";
       compose += "    restart: unless-stopped\n";
@@ -350,7 +353,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
       compose += "\n  core_api:\n";
       compose += "    image: ${CORE_API_IMAGE}\n";
       compose += "    env_file: .env\n";
-      compose += "    profiles: [\"core\", \"suite\", \"knowledger\", \"all\"]\n";
+      compose += "    profiles: [\"core\", \"suite\", \"de\", \"knowledger\", \"all\"]\n";
       compose += "    ports:\n";
       compose += "      - \"${CORE_API_PORT:-8000}:8000\"\n";
       compose += "    restart: unless-stopped\n";
@@ -364,12 +367,17 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
     compose += "\n  myai_de_api:\n";
     compose += "    image: ${MYAI_DE_API_IMAGE:-myaitech/aide-api:stable}\n";
     compose += "    env_file: .env\n";
+    compose += "    environment:\n";
+    compose += "      MYAIDE_AUTH_MODE: ${MYAIDE_AUTH_MODE:-core}\n";
+    compose += "      CORE_BASE_URL: ${CORE_BASE_URL:-http://core_api:8000}\n";
+    compose += "      CORE_TENANT_ID: ${CORE_TENANT_ID:-${INSTALL_TENANT_ID:-tenant-local}}\n";
     compose += "    profiles: [\"de\", \"all\"]\n";
     compose += "    ports:\n";
     compose += "      - \"${MYAI_DE_API_PORT:-8010}:8000\"\n";
     compose += "    restart: unless-stopped\n";
-    if (deps.length) {
-      compose += `    depends_on:\n${deps.map((d) => `      - ${d}`).join("\n")}\n`;
+    const myAideDeps = ["core_api", ...deps.filter((dependency) => dependency !== "core_api")];
+    if (myAideDeps.length) {
+      compose += `    depends_on:\n${myAideDeps.map((d) => `      - ${d}`).join("\n")}\n`;
     }
   }
 
@@ -454,7 +462,7 @@ export function buildArtifacts(state: WizardState): GeneratedArtifact[] {
 
   if (state.infra_components.includes("postgres") || state.infra_components.includes("pgvector")) {
     const img = state.infra_components.includes("pgvector") ? "pgvector/pgvector:pg16" : "postgres:16-alpine";
-    compose += `\n  postgres:\n    image: ${img}\n    profiles: ["core", "suite", "de", "knowledger", "all"]\n    environment:\n      POSTGRES_DB: \${POSTGRES_DB}\n      POSTGRES_USER: \${POSTGRES_USER}\n      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n      - ./migrations:/docker-entrypoint-initdb.d:ro\n    ports:\n      - \"\${POSTGRES_PORT:-5432}:5432\"\n`;
+    compose += `\n  postgres:\n    image: ${img}\n    profiles: ["core", "suite", "de", "knowledger", "all"]\n    environment:\n      POSTGRES_DB: \${POSTGRES_DB}\n      POSTGRES_USER: \${POSTGRES_USER}\n      POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}\n    volumes:\n      - pgdata:/var/lib/postgresql/data\n    ports:\n      - \"\${POSTGRES_PORT:-5432}:5432\"\n`;
   }
 
   if (state.infra_components.includes("local_model_runtime")) {
@@ -481,6 +489,8 @@ myai-core/
   bootstrap-local.ps1
   check-runtime.sh
   check-runtime.ps1
+  migrate-db.sh
+  migrate-db.ps1
   migrations/
     0001_initial_onboarding.sql
     0002_studio_identity_foundation.sql
@@ -490,10 +500,11 @@ myai-core/
 
 ## Script reference
 - \`bootstrap-local.sh\` / \`bootstrap-local.ps1\`: starts local infrastructure containers using your selected engine (Docker or Podman).
-- \`deploy.sh\` / \`deploy.ps1\`: non-destructive deployment refresh and migration apply (preserves database volumes).
-- \`refresh-images.sh\` / \`refresh-images.ps1\`: pulls latest images and recreates matching services (optionally filtered by CSV image list).
+- \`deploy.sh\` / \`deploy.ps1\`: non-destructive deployment refresh and versioned migration apply (preserves database volumes).
+- \`refresh-images.sh\` / \`refresh-images.ps1\`: pulls images, recreates matching services, and applies pending versioned migrations.
+- \`migrate-db.sh\` / \`migrate-db.ps1\`: runs Grate apply, status, dry-run, or one-time legacy baseline operations.
 - \`check-runtime.sh\` / \`check-runtime.ps1\`: checks Core health endpoint and prints runtime-status endpoint guidance.
-- SQL files in \`migrations/\` are auto-applied on first postgres boot (in lexical filename order).
+- SQL files in \`migrations/\` are applied through the Grate version ledger after PostgreSQL starts.
 - If you rebuild \`:local\` images during development, make sure \`CONTAINER_ENGINE\` matches the engine where those images were built (for example \`docker\` on Windows if you built with Docker Desktop).
 - \`../scripts/multi-repo-workflow.sh\` / \`../scripts/multi-repo-workflow.ps1\`: orchestrates building, refreshing, deploying, resetting, and publishing across mapped sibling repos.
 
@@ -509,7 +520,7 @@ myai-core/
    - PowerShell: \`.\\bootstrap-local.ps1 -ProfileSet all\`
    - Refresh images before restart: add \`--refresh\` or \`-Refresh\`
 3. If using local source mode, compose builds \`core_api\` from \`./backend/Dockerfile\`.
-4. On first postgres start, compose auto-applies repo-root \`migrations/*.sql\` via \`/docker-entrypoint-initdb.d\`.
+4. After PostgreSQL starts, the bootstrap script applies pending Grate migrations from repo-root \`migrations/\`.
 5. Run runtime checks:
    - Bash: \`./check-runtime.sh\`
    - PowerShell: \`.\\check-runtime.ps1\`
@@ -523,17 +534,17 @@ myai-core/
   - \`bash ./scripts/multi-repo-workflow.sh --action list\`
   - \`.\\scripts\\multi-repo-workflow.ps1 -Action list\`
 - Build all mapped repos:
-  - \`bash ./scripts/multi-repo-workflow.sh --action build --repos all --engine podman\`
-  - \`.\\scripts\\multi-repo-workflow.ps1 -Action build -Repos all -Engine podman\`
+  - \`bash ./scripts/multi-repo-workflow.sh --action build --targets all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action build -Targets all -Engine podman\`
 - Refresh all mapped repos into the suite:
-  - \`bash ./scripts/multi-repo-workflow.sh --action refresh --repos all --engine podman\`
-  - \`.\\scripts\\multi-repo-workflow.ps1 -Action refresh -Repos all -Engine podman\`
+  - \`bash ./scripts/multi-repo-workflow.sh --action refresh --targets all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action refresh -Targets all -Engine podman\`
 - Deploy while preserving volumes:
-  - \`bash ./scripts/multi-repo-workflow.sh --action deploy --repos all --engine podman\`
-  - \`.\\scripts\\multi-repo-workflow.ps1 -Action deploy -Repos all -Engine podman\`
+  - \`bash ./scripts/multi-repo-workflow.sh --action deploy --targets all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action deploy -Targets all -Engine podman\`
 - Destroy data volumes and start clean:
-  - \`bash ./scripts/multi-repo-workflow.sh --action reset-data --repos all --engine podman\`
-  - \`.\\scripts\\multi-repo-workflow.ps1 -Action reset-data -Repos all -Engine podman\`
+  - \`bash ./scripts/multi-repo-workflow.sh --action reset-data --targets all --engine podman\`
+  - \`.\\scripts\\multi-repo-workflow.ps1 -Action reset-data -Targets all -Engine podman\`
 
 ### Refresh a rebuilt local image into the running stack
 
@@ -586,7 +597,7 @@ This removes Postgres and other named volume data.
 - PowerShell equivalents:
   - \`.\\deploy.ps1 -ProfileSet all\`
   - \`.\\deploy.ps1 -ProfileSet all -RefreshImages\`
-- This flow does not remove volumes and runs all SQL migrations in \`../migrations\` against the current database.
+- This flow does not remove volumes and applies only pending Grate migrations from \`../migrations\`.
 
 ## Compose note
 - Generated compose always includes infrastructure dependencies (PostgreSQL/pgvector and optional local model runtime).
@@ -611,6 +622,7 @@ ENGINE="\${CONTAINER_ENGINE:-${state.container_engine}}"
 CORE_MODE="\${CORE_API_RUNTIME_MODE:-${state.core_api_runtime_mode}}"
 PROFILE_SET="all"
 REFRESH=0
+APPLY_MIGRATIONS=true
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -622,9 +634,13 @@ while [ $# -gt 0 ]; do
       REFRESH=1
       shift
       ;;
+    --skip-migrations)
+      APPLY_MIGRATIONS=false
+      shift
+      ;;
     *)
       echo "Unknown argument: $1"
-      echo "Usage: ./bootstrap-local.sh [--profile-set core|suite|de|knowledger|all] [--refresh]"
+      echo "Usage: ./bootstrap-local.sh [--profile-set core|suite|de|knowledger|all] [--refresh] [--skip-migrations]"
       exit 1
       ;;
   esac
@@ -637,6 +653,12 @@ fi
 
 if [ "$REFRESH" -eq 1 ]; then
   "$ENGINE" compose --profile "$PROFILE_SET" pull || true
+fi
+
+"$ENGINE" compose --profile "$PROFILE_SET" up -d postgres
+
+if [[ "$APPLY_MIGRATIONS" == "true" ]]; then
+  bash "$(dirname -- "\${BASH_SOURCE[0]}")/migrate-db.sh" apply
 fi
 
 "$ENGINE" compose --profile "$PROFILE_SET" up -d --remove-orphans
@@ -652,7 +674,8 @@ fi
   const bootstrapPs1 = `param(
   [ValidateSet("core", "suite", "de", "knowledger", "all")]
   [string]$ProfileSet = "all",
-  [switch]$Refresh
+  [switch]$Refresh,
+  [switch]$SkipMigrations
 )
 
 $ErrorActionPreference = "Stop"
@@ -668,7 +691,20 @@ if ($Refresh) {
   & $engine compose --profile $ProfileSet pull
 }
 
+& $engine compose --profile $ProfileSet up -d postgres
+if ($LASTEXITCODE -ne 0) {
+  throw "PostgreSQL startup failed for profile set: $ProfileSet"
+}
+if (-not $SkipMigrations) {
+  & (Join-Path $PSScriptRoot "migrate-db.ps1") -Action apply
+  if ($LASTEXITCODE -ne 0) {
+    throw "Migration apply failed with exit code $LASTEXITCODE."
+  }
+}
 & $engine compose --profile $ProfileSet up -d --remove-orphans
+if ($LASTEXITCODE -ne 0) {
+  throw "Compose startup failed for profile set: $ProfileSet"
+}
 Write-Host "Infrastructure started with $engine compose (profile: $ProfileSet)."
 if ($coreMode -eq "local_source") {
   Write-Host "Core API local-source mode active (built from ./backend/Dockerfile)."
@@ -723,6 +759,7 @@ set -euo pipefail
 ENGINE="\${CONTAINER_ENGINE:-${state.container_engine}}"
 PROFILE_SET="\${2:-all}"
 IMAGES_CSV="\${1:-}"
+APPLY_MIGRATIONS="\${3:-true}"
 
 if [ ! -f .env ]; then
   echo "Missing .env. Copy .env.template to .env and fill values first."
@@ -738,6 +775,14 @@ is_local_tag() {
   esac
 }
 
+apply_pending_migrations() {
+  [[ "$APPLY_MIGRATIONS" == "true" ]] || return 0
+  echo "Ensuring PostgreSQL is available..."
+  "$ENGINE" compose --profile "$PROFILE_SET" up -d postgres
+  echo "Applying pending versioned migrations..."
+  bash "$(dirname -- "\${BASH_SOURCE[0]}")/migrate-db.sh" apply
+}
+
 if [ -n "$IMAGES_CSV" ]; then
   IFS=',' read -r -a IMAGES <<< "$IMAGES_CSV"
   MATCHED_SERVICES=""
@@ -751,22 +796,28 @@ if [ -n "$IMAGES_CSV" ]; then
     else
       echo "Pulling $image_trimmed"
       if ! "$ENGINE" pull "$image_trimmed"; then
-        echo "Pull failed for $image_trimmed; continuing with recreate."
+        echo "Pull failed for $image_trimmed" >&2
+        exit 1
       fi
     fi
 
     SERVICE_MATCHES="$(printf '%s' "$CONFIG_JSON" | python3 -c "import json,sys; cfg=json.load(sys.stdin); target=sys.argv[1]; out=[name for name,svc in cfg.get('services',{}).items() if str(svc.get('image','')).strip()==target]; print(' '.join(out))" "$image_trimmed")"
     if [ -n "$SERVICE_MATCHES" ]; then
       MATCHED_SERVICES="$MATCHED_SERVICES $SERVICE_MATCHES"
+    else
+      echo "No service matched requested image $image_trimmed in profile $PROFILE_SET" >&2
+      exit 1
     fi
   done
 
   MATCHED_SERVICES="$(echo "$MATCHED_SERVICES" | xargs)"
   if [ -n "$MATCHED_SERVICES" ]; then
+    apply_pending_migrations
     echo "Recreating services: $MATCHED_SERVICES"
     "$ENGINE" compose --profile "$PROFILE_SET" up -d --no-deps --force-recreate $MATCHED_SERVICES
   else
-    echo "No services matched requested images for profile $PROFILE_SET"
+    echo "No services matched requested images for profile $PROFILE_SET" >&2
+    exit 1
   fi
 else
   REMOTE_IMAGES="$(printf '%s' "$CONFIG_JSON" | python3 -c "import json,sys; cfg=json.load(sys.stdin); imgs=sorted({str(svc.get('image','')).strip() for svc in cfg.get('services',{}).values() if str(svc.get('image','')).strip() and not str(svc.get('image','')).strip().endswith(':local')}); print('\\n'.join(imgs))")"
@@ -776,21 +827,23 @@ else
       [ -z "$image" ] && continue
       echo "Pulling $image"
       if ! "$ENGINE" pull "$image"; then
-        echo "Pull failed for $image; continuing with recreate."
+        echo "Pull failed for $image" >&2
+        exit 1
       fi
     done <<EOF
 $REMOTE_IMAGES
 EOF
   fi
 
+  apply_pending_migrations
   "$ENGINE" compose --profile "$PROFILE_SET" up -d --force-recreate --remove-orphans
 fi
 `;
 
   const refreshImagesPs1 = `param(
   [string]$ImagesCsv = "",
-  [ValidateSet("core", "suite", "de", "knowledger", "all")]
-  [string]$ProfileSet = "all"
+  [string]$ProfileSet = "all",
+  [switch]$SkipMigrations
 )
 
 $ErrorActionPreference = "Stop"
@@ -801,10 +854,27 @@ if (-not (Test-Path ".env")) {
 }
 
 $configJson = & $engine compose --profile $ProfileSet config --format json
+if ($LASTEXITCODE -ne 0) {
+  throw "Compose config failed for profile $ProfileSet."
+}
 $config = $configJson | ConvertFrom-Json
 
 function Get-IsLocalTag([string]$image) {
   return $image -match ':local$'
+}
+
+function Invoke-PendingMigrations {
+  if ($SkipMigrations) { return }
+  Write-Host "Ensuring PostgreSQL is available..."
+  & $engine compose --profile $ProfileSet up -d postgres
+  if ($LASTEXITCODE -ne 0) {
+    throw "PostgreSQL startup failed for profile $ProfileSet."
+  }
+  Write-Host "Applying pending versioned migrations..."
+  & (Join-Path $PSScriptRoot "migrate-db.ps1") -Action apply
+  if ($LASTEXITCODE -ne 0) {
+    throw "Migration apply failed with exit code $LASTEXITCODE."
+  }
 }
 
 if ($ImagesCsv) {
@@ -815,28 +885,39 @@ if ($ImagesCsv) {
     } else {
       Write-Host "Pulling $image"
       & $engine pull $image
-      if (-not $?) {
-        Write-Warning "Pull failed for $image; continuing with recreate."
+      if ($LASTEXITCODE -ne 0) {
+        throw "Pull failed for $image."
       }
     }
   }
 
   $imageSet = @{}
   foreach ($image in $images) { $imageSet[$image] = $true }
+  $matchedImageSet = @{}
 
   $services = @()
   foreach ($svc in $config.services.PSObject.Properties) {
     $serviceImage = [string]$svc.Value.image
     if ($serviceImage -and $imageSet.ContainsKey($serviceImage)) {
       $services += $svc.Name
+      $matchedImageSet[$serviceImage] = $true
     }
   }
 
+  $missingImages = $images | Where-Object { -not $matchedImageSet.ContainsKey($_) }
+  if ($missingImages.Count -gt 0) {
+    throw "No service matched requested images: $($missingImages -join ', ')"
+  }
+
   if ($services.Count -gt 0) {
+    Invoke-PendingMigrations
     Write-Host "Recreating services: $($services -join ', ')"
     & $engine compose --profile $ProfileSet up -d --no-deps --force-recreate @services
+    if ($LASTEXITCODE -ne 0) {
+      throw "Service recreate failed for profile $ProfileSet."
+    }
   } else {
-    Write-Warning "No services matched requested images for profile $ProfileSet."
+    throw "No services matched requested images for profile $ProfileSet."
   }
 } else {
   $remoteImages = @()
@@ -851,12 +932,78 @@ if ($ImagesCsv) {
   foreach ($image in $remoteImages) {
     Write-Host "Pulling $image"
     & $engine pull $image
-    if (-not $?) {
-      Write-Warning "Pull failed for $image; continuing with recreate."
+    if ($LASTEXITCODE -ne 0) {
+      throw "Pull failed for $image."
     }
   }
 
+  Invoke-PendingMigrations
   & $engine compose --profile $ProfileSet up -d --force-recreate --remove-orphans
+  if ($LASTEXITCODE -ne 0) {
+    throw "Service recreate failed for profile $ProfileSet."
+  }
+}
+`;
+
+  const migrateDbSh = `#!/usr/bin/env bash
+set -euo pipefail
+
+ACTION="\${1:-apply}"
+shift || true
+SUITE_ROOT="$(cd -- "$(dirname -- "\${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SUITE_ROOT/migration-runner.sh" && -d "$SUITE_ROOT/migrations" ]]; then
+  CORE_ROOT="$SUITE_ROOT"
+else
+  CORE_ROOT="$(cd -- "$SUITE_ROOT/.." && pwd)"
+fi
+
+[[ -f "$CORE_ROOT/migration-runner.sh" ]] || { echo "Migration runner not found: $CORE_ROOT/migration-runner.sh" >&2; exit 1; }
+[[ -d "$CORE_ROOT/migrations" ]] || { echo "Migrations directory not found: $CORE_ROOT/migrations" >&2; exit 1; }
+
+exec bash "$CORE_ROOT/migration-runner.sh" \\
+  --action "$ACTION" \\
+  --suite-path "$SUITE_ROOT" \\
+  --migrations-path "$CORE_ROOT/migrations" \\
+  "$@"
+`;
+
+  const migrateDbPs1 = `param(
+  [ValidateSet("apply", "baseline", "dry-run", "status")]
+  [string]$Action = "apply",
+  [ValidatePattern("^\\d{4}$")]
+  [string]$BaselineThrough = "",
+  [switch]$BaselineConfirmSchema,
+  [switch]$RestoreTools,
+  [switch]$Json
+)
+
+$ErrorActionPreference = "Stop"
+$localRunner = Join-Path $PSScriptRoot "migration-runner.ps1"
+$localMigrations = Join-Path $PSScriptRoot "migrations"
+$coreRoot = if ((Test-Path $localRunner) -and (Test-Path $localMigrations)) {
+  Resolve-Path $PSScriptRoot
+} else {
+  Resolve-Path (Join-Path $PSScriptRoot "..")
+}
+$runner = Join-Path $coreRoot "migration-runner.ps1"
+$migrations = Join-Path $coreRoot "migrations"
+
+if (-not (Test-Path $runner)) { throw "Migration runner not found: $runner" }
+if (-not (Test-Path $migrations)) { throw "Migrations directory not found: $migrations" }
+
+$runnerArguments = @{
+  Action = $Action
+  SuitePath = $PSScriptRoot
+  MigrationsPath = $migrations
+}
+if ($RestoreTools) { $runnerArguments.RestoreTools = $true }
+if ($BaselineThrough) { $runnerArguments.BaselineThrough = $BaselineThrough }
+if ($BaselineConfirmSchema) { $runnerArguments.BaselineConfirmSchema = $true }
+if ($Json) { $runnerArguments.Json = $true }
+
+& $runner @runnerArguments
+if ($LASTEXITCODE -ne 0) {
+  throw "Migration runner failed with exit code $LASTEXITCODE."
 }
 `;
 
@@ -866,6 +1013,7 @@ set -euo pipefail
 ENGINE="\${CONTAINER_ENGINE:-${state.container_engine}}"
 PROFILE_SET="\${1:-all}"
 REFRESH_IMAGES="\${2:-false}"
+APPLY_MIGRATIONS="\${3:-true}"
 
 if [ ! -f .env ]; then
   echo "Missing .env. Copy env.template to .env and fill values first."
@@ -879,19 +1027,24 @@ if [ "$REFRESH_IMAGES" = "true" ]; then
   fi
 fi
 
+echo "Ensuring PostgreSQL is available..."
+"$ENGINE" compose --profile "$PROFILE_SET" up -d postgres
+
+if [[ "$APPLY_MIGRATIONS" == "true" ]]; then
+  echo "Applying pending versioned migrations..."
+  bash "$(dirname -- "\${BASH_SOURCE[0]}")/migrate-db.sh" apply
+fi
+
 echo "Deploying services for profile set: $PROFILE_SET"
 "$ENGINE" compose --profile "$PROFILE_SET" up -d --build --force-recreate --remove-orphans
-
-echo "Applying SQL migrations (data-preserving)..."
-"$ENGINE" compose exec -T postgres sh -lc 'set -e; for f in /docker-entrypoint-initdb.d/*.sql; do echo "Applying $f"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"; done'
 
 echo "Deployment complete. Containers refreshed, volumes preserved."
 `;
 
   const deployPs1 = `param(
-  [ValidateSet("core", "suite", "de", "knowledger", "all")]
   [string]$ProfileSet = "all",
-  [switch]$RefreshImages
+  [switch]$RefreshImages,
+  [switch]$SkipMigrations
 )
 
 $ErrorActionPreference = "Stop"
@@ -904,20 +1057,30 @@ if (-not (Test-Path ".env")) {
 if ($RefreshImages) {
   Write-Host "Pulling images for profile set: $ProfileSet"
   & $engine compose --profile $ProfileSet pull
-  if (-not $?) {
+  if ($LASTEXITCODE -ne 0) {
     Write-Warning "Image pull reported failures. Continuing so local/buildable images can still be deployed."
+  }
+}
+
+Write-Host "Ensuring PostgreSQL is available..."
+& $engine compose --profile $ProfileSet up -d postgres
+if ($LASTEXITCODE -ne 0) {
+  throw "PostgreSQL startup failed for profile set: $ProfileSet"
+}
+
+if (-not $SkipMigrations) {
+  Write-Host "Applying pending versioned migrations..."
+  & (Join-Path $PSScriptRoot "migrate-db.ps1") -Action apply
+  if ($LASTEXITCODE -ne 0) {
+    throw "Migration apply failed with exit code $LASTEXITCODE."
   }
 }
 
 Write-Host "Deploying services for profile set: $ProfileSet"
 & $engine compose --profile $ProfileSet up -d --build --force-recreate --remove-orphans
-if (-not $?) {
+if ($LASTEXITCODE -ne 0) {
   throw "Compose deploy failed for profile set: $ProfileSet"
 }
-
-Write-Host "Applying SQL migrations (data-preserving)..."
-$migrationCmd = 'set -e; for f in /docker-entrypoint-initdb.d/*.sql; do echo "Applying $f"; PGPASSWORD="$POSTGRES_PASSWORD" psql -h localhost -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f "$f"; done'
-& $engine compose exec -T postgres sh -lc $migrationCmd
 
 Write-Host "Deployment complete. Containers refreshed, volumes preserved."
 `;
@@ -990,6 +1153,8 @@ Write-Host "Deployment complete. Containers refreshed, volumes preserved."
     artifacts.push({ name: "deploy.ps1", type: "ps1", content: deployPs1 });
     artifacts.push({ name: "refresh-images.sh", type: "sh", content: refreshImagesSh });
     artifacts.push({ name: "refresh-images.ps1", type: "ps1", content: refreshImagesPs1 });
+    artifacts.push({ name: "migrate-db.sh", type: "sh", content: migrateDbSh });
+    artifacts.push({ name: "migrate-db.ps1", type: "ps1", content: migrateDbPs1 });
     artifacts.push({ name: "check-runtime.sh", type: "sh", content: checkRuntimeSh });
     artifacts.push({ name: "check-runtime.ps1", type: "ps1", content: checkRuntimePs1 });
     artifacts.push({ name: "bootstrap-bundle.json", type: "json", content: "" });

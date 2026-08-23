@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://myai.dev/schemas/workspace-manifest.v1.json",
+  "title": "MyAI workspace orchestration manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "workspaceRoot", "suite", "repositories", "components"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schemaVersion": {"const": "1.0"},
+    "workspaceRoot": {
+      "type": "string",
+      "minLength": 1,
+      "not": {"pattern": "^(?:[A-Za-z]:[\\\\/]|[\\\\/])"}
+    },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profileOrder"],
+      "properties": {
+        "profileOrder": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}
+        }
+      }
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/repository"}
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/component"}
+    },
+    "pipelines": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "items": {"$ref": "#/$defs/pipelineStep"}
+      }
+    }
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {"not": {"pattern": "^(?:[A-Za-z]:[\\\\/]|[\\\\/])"}},
+        {"not": {"pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"}}
+      ]
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "path", "remoteName", "remoteUrl", "branch"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1},
+        "path": {"$ref": "#/$defs/relativePath"},
+        "remoteName": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+        "remoteUrl": {
+          "type": "string",
+          "pattern": "^(https://|ssh://|git@)",
+          "allOf": [
+            {"not": {"pattern": "[?#]"}},
+            {"not": {"pattern": "^https://[^/]*@"}}
+          ]
+        },
+        "branch": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"}
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "repository", "path", "context", "dockerfile", "image", "imageVariable", "profile"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "label": {"type": "string", "minLength": 1},
+        "repository": {"$ref": "#/$defs/id"},
+        "path": {"$ref": "#/$defs/relativePath"},
+        "context": {"$ref": "#/$defs/relativePath"},
+        "dockerfile": {"$ref": "#/$defs/relativePath"},
+        "image": {"type": "string", "pattern": "^[A-Za-z0-9._/-]+$"},
+        "imageVariable": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+        "profile": {"$ref": "#/$defs/id"}
+      }
+    },
+    "pipelineStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "targets"],
+      "properties": {
+        "action": {"enum": ["sync", "build", "refresh", "deploy"]},
+        "targets": {
+          "oneOf": [
+            {"const": "all"},
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"$ref": "#/$defs/id"}
+            }
+          ]
+        },
+        "configuredImages": {"type": "boolean"},
+        "refreshImages": {"type": "boolean"}
+      }
+    }
+  }
+}

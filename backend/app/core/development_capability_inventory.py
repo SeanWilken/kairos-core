@@ -143,6 +143,7 @@ def build_workspace_capability_profile(*, tenant_id: str, org_id: str, user_id: 
         if _entity_language(item)
     }
     metadata = _workspace_metadata(workspace)
+    orchestration_manifest = str(metadata.get("orchestration_manifest") or "").strip()
     workspace_languages = metadata.get("languages", []) if isinstance(metadata.get("languages", []), list) else []
     if isinstance(workspace_languages, list):
         languages.update(str(item).strip().lower() for item in workspace_languages if str(item).strip())
@@ -157,6 +158,23 @@ def build_workspace_capability_profile(*, tenant_id: str, org_id: str, user_id: 
     if repo_name or repo_root:
         _add_capability(capability_map, key="repo.checkout", status="available", source="workspace_metadata", provenance={"repo_name": repo_name, "repo_root": repo_root})
         _add_capability(capability_map, key="repo.pull_latest", status="available", source="workspace_metadata", provenance={"repo_name": repo_name, "repo_root": repo_root})
+    if orchestration_manifest:
+        orchestration_provenance = {
+            "workspace_id": workspace_id,
+            "runner_id": runner_id,
+            "manifest": orchestration_manifest,
+            "executor": "myaide_runner",
+            "attestation_required": True,
+        }
+        for key in (
+            "workspace.pipeline.run",
+            "repo.sync",
+            "container.images.refresh",
+            "container.stack.deploy",
+            "database.migrations.status",
+            "database.migrations.apply",
+        ):
+            _add_capability(capability_map, key=key, status="degraded", source="workspace_metadata", provenance=orchestration_provenance)
     if knowledge_entities:
         _add_capability(capability_map, key="workspace.code_index", status="available", source="knowledge_graph", provenance={"entity_count": len(knowledge_entities)})
     for language in sorted(languages):
@@ -177,6 +195,7 @@ def build_workspace_capability_profile(*, tenant_id: str, org_id: str, user_id: 
         "summary": {
             "repo_name": repo_name,
             "repo_root": repo_root,
+            "orchestration_manifest": orchestration_manifest,
             "languages": sorted(languages),
             "knowledge_entity_count": len(knowledge_entities),
         },
@@ -237,6 +256,7 @@ def resolve_capability_requirements(*, capability_profile: dict[str, Any], requi
             continue
         status = str(item.get("status", "unavailable")).strip()
         if capability in protected_capabilities:
+            allow = False
             results.append(
                 {
                     "key": capability,

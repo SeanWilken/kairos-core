@@ -6,6 +6,9 @@ The format is based on Keep a Changelog.
 
 ## [Unreleased]
 
+- Added a manifest-driven workspace helper for MyAIDE-compatible repository sync, container build/refresh/deploy operations, structured dry-run output, and reusable development pipelines.
+- Added the declarative deployment control-plane foundation for registry secret references, environments, immutable releases, migration plans, desired deployment history, and append-only runtime observations.
+- Added the missing numbered migration for Studio workflow definitions, runs, and human-review queue persistence.
 - Added the initial MyAI release baseline with deterministic context and knowledge contracts, development capability policy checks, executable workflow review gates, bootstrap-aware administrator authentication, canonical container publishing workflows, and Linux/Zorin orchestration support.
 - Added administrator-oriented orchestration and tooling foundations including adaptive chat action routing, async provider model gateway adapters, fallback approval workflows, provider-scoped prompt template activation/rollback, and configurable image/email tool plugin runtimes with persisted execution history.
 - Added prompt-catalog governance foundation with schema-only migrations, checksum-validated JSON import/export endpoints, signature-ready manifest metadata, and persona approval policy enforcement for chat/runtime flows.

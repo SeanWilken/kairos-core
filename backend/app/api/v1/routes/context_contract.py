@@ -13,7 +13,7 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 
-from app.core.auth_context import require_authentication, require_roles
+from app.core.auth_context import require_authentication, require_org_access, require_roles
 from app.core.artifact_rules import evaluate_artifact_rules
 from app.core.audit_store import audit_store
 from app.core.collaboration_store import collaboration_store
@@ -2726,7 +2726,12 @@ async def upload_knowledge_document(
     metadata_json: str | None = Form(default=None),
 ) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
-    require_roles(auth, {"owner", "admin"})
+    require_org_access(
+        auth,
+        org_id=org_id,
+        allowed_roles={"owner", "admin"},
+        require_scoped_context=True,
+    )
 
     content = await file.read()
     if not content:
@@ -2878,6 +2883,7 @@ def list_knowledge_documents(
     cursor: str | None = Query(default=None),
 ) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
+    require_org_access(auth, org_id=org_id)
     items = knowledge_contract_store.list_visible_entities(
         tenant_id=auth.tenant_id,
         org_id=org_id,
@@ -2958,6 +2964,11 @@ def list_knowledge_documents(
 @router.get("/knowledge/documents/{document_id}")
 def get_knowledge_document(request: Request, document_id: str) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
+    require_org_access(
+        auth,
+        org_id=auth.org_id or "",
+        require_scoped_context=True,
+    )
     entity = knowledge_contract_store.get_visible_entity(
         tenant_id=auth.tenant_id,
         org_id=auth.org_id or "",
@@ -2992,6 +3003,11 @@ def get_knowledge_document(request: Request, document_id: str) -> dict[str, Any]
 @router.get("/knowledge/documents/{document_id}/content")
 def get_knowledge_document_content(request: Request, document_id: str) -> Response:
     auth = require_authentication(request, require_org=True)
+    require_org_access(
+        auth,
+        org_id=auth.org_id or "",
+        require_scoped_context=True,
+    )
     entity = knowledge_contract_store.get_visible_entity(
         tenant_id=auth.tenant_id,
         org_id=auth.org_id or "",

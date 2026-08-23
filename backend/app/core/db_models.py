@@ -1,15 +1,26 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class BootstrapSessionModel(Base):
@@ -131,6 +142,7 @@ class StudioOrganizationModel(Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "slug", name="uq_studio_organizations_tenant_slug"),
+        UniqueConstraint("org_id", "tenant_id", name="uq_studio_organizations_scope"),
     )
 
 
@@ -906,6 +918,7 @@ class AuditEventModel(Base):
 
     audit_event_id: Mapped[str] = mapped_column(Text, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     actor_type: Mapped[str] = mapped_column(Text, nullable=False, default="system")
     actor_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
     action: Mapped[str] = mapped_column(Text, nullable=False)
@@ -1345,7 +1358,6 @@ class StudioWorkflowDefinitionModel(Base):
     tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     org_id: Mapped[str] = mapped_column(
         Text,
-        ForeignKey("studio_organizations.org_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -1368,6 +1380,13 @@ class StudioWorkflowDefinitionModel(Base):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "org_id", "name", name="uq_studio_workflow_definitions_org_name"),
+        UniqueConstraint("workflow_id", "tenant_id", "org_id", name="uq_studio_workflow_definitions_scope"),
+        ForeignKeyConstraint(
+            ["org_id", "tenant_id"],
+            ["studio_organizations.org_id", "studio_organizations.tenant_id"],
+            name="fk_studio_workflow_definition_org_scope",
+            ondelete="CASCADE",
+        ),
     )
 
 
@@ -1377,7 +1396,6 @@ class WorkflowRunModel(Base):
     run_id: Mapped[str] = mapped_column(Text, primary_key=True)
     workflow_id: Mapped[str] = mapped_column(
         Text,
-        ForeignKey("studio_workflow_definitions.workflow_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -1395,6 +1413,20 @@ class WorkflowRunModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
 
+    __table_args__ = (
+        UniqueConstraint("run_id", "tenant_id", "org_id", name="uq_workflow_runs_scope"),
+        ForeignKeyConstraint(
+            ["workflow_id", "tenant_id", "org_id"],
+            [
+                "studio_workflow_definitions.workflow_id",
+                "studio_workflow_definitions.tenant_id",
+                "studio_workflow_definitions.org_id",
+            ],
+            name="fk_workflow_runs_definition_scope",
+            ondelete="CASCADE",
+        ),
+    )
+
 
 class WorkflowReviewQueueModel(Base):
     __tablename__ = "workflow_review_queue"
@@ -1402,13 +1434,12 @@ class WorkflowReviewQueueModel(Base):
     review_id: Mapped[str] = mapped_column(Text, primary_key=True)
     workflow_id: Mapped[str] = mapped_column(
         Text,
-        ForeignKey("studio_workflow_definitions.workflow_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     org_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
-    run_id: Mapped[str] = mapped_column(Text, nullable=False, default="", index=True)
+    run_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     node_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
     title: Mapped[str] = mapped_column(Text, nullable=False, default="")
     summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -1427,6 +1458,25 @@ class WorkflowReviewQueueModel(Base):
     context_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workflow_id", "tenant_id", "org_id"],
+            [
+                "studio_workflow_definitions.workflow_id",
+                "studio_workflow_definitions.tenant_id",
+                "studio_workflow_definitions.org_id",
+            ],
+            name="fk_workflow_review_definition_scope",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["run_id", "tenant_id", "org_id"],
+            ["workflow_runs.run_id", "workflow_runs.tenant_id", "workflow_runs.org_id"],
+            name="fk_workflow_review_run_scope",
+            ondelete="CASCADE",
+        ),
+    )
 
 
 class WorkspaceRecordModel(Base):
@@ -1565,5 +1615,255 @@ class DailySummaryModel(Base):
             "user_id",
             "summary_date",
             name="uq_daily_summaries_tenant_org_user_date",
+        ),
+    )
+
+
+class DeploymentRegistryConnectionModel(Base):
+    __tablename__ = "deployment_registry_connections"
+
+    registry_connection_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    registry_url: Mapped[str] = mapped_column(Text, nullable=False)
+    namespace: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    credential_secret_ref: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active", index=True)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "org_id", "name", name="uq_deployment_registry_name"),
+        UniqueConstraint("registry_connection_id", "tenant_id", "org_id", name="uq_deployment_registry_scope"),
+        ForeignKeyConstraint(
+            ["org_id", "tenant_id"],
+            ["studio_organizations.org_id", "studio_organizations.tenant_id"],
+            name="fk_deployment_registry_org_scope",
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class DeploymentEnvironmentModel(Base):
+    __tablename__ = "deployment_environments"
+
+    environment_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    environment_type: Mapped[str] = mapped_column(Text, nullable=False, default="development")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="active", index=True)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "org_id", "slug", name="uq_deployment_environment_slug"),
+        UniqueConstraint("environment_id", "tenant_id", "org_id", name="uq_deployment_environment_scope"),
+        ForeignKeyConstraint(
+            ["org_id", "tenant_id"],
+            ["studio_organizations.org_id", "studio_organizations.tenant_id"],
+            name="fk_deployment_environment_org_scope",
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class DeploymentReleaseModel(Base):
+    __tablename__ = "deployment_releases"
+
+    release_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    registry_connection_id: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        index=True,
+    )
+    component: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    version: Mapped[str] = mapped_column(Text, nullable=False)
+    artifact_type: Mapped[str] = mapped_column(Text, nullable=False, default="container")
+    artifact_ref: Mapped[str] = mapped_column(Text, nullable=False)
+    artifact_digest: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[str] = mapped_column(Text, nullable=False, default="candidate", index=True)
+    contract_version: Mapped[str] = mapped_column(Text, nullable=False, default="v1")
+    migration_plan_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    rollback_instructions: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="candidate", index=True)
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "org_id",
+            "component",
+            "version",
+            name="uq_deployment_release_component_version",
+        ),
+        UniqueConstraint("release_id", "tenant_id", "org_id", name="uq_deployment_release_scope"),
+        ForeignKeyConstraint(
+            ["registry_connection_id", "tenant_id", "org_id"],
+            [
+                "deployment_registry_connections.registry_connection_id",
+                "deployment_registry_connections.tenant_id",
+                "deployment_registry_connections.org_id",
+            ],
+            name="fk_deployment_release_registry_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "tenant_id"],
+            ["studio_organizations.org_id", "studio_organizations.tenant_id"],
+            name="fk_deployment_release_org_scope",
+            ondelete="CASCADE",
+        ),
+    )
+
+
+class DeploymentDeclarationModel(Base):
+    __tablename__ = "deployment_declarations"
+
+    deployment_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    environment_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    release_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    component: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="declared", index=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    supersedes_deployment_id: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+    desired_state_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("deployment_id", "tenant_id", "org_id", name="uq_deployment_declaration_scope"),
+        ForeignKeyConstraint(
+            ["environment_id", "tenant_id", "org_id"],
+            ["deployment_environments.environment_id", "deployment_environments.tenant_id", "deployment_environments.org_id"],
+            name="fk_deployment_declaration_environment_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "tenant_id"],
+            ["studio_organizations.org_id", "studio_organizations.tenant_id"],
+            name="fk_deployment_declaration_org_scope",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["release_id", "tenant_id", "org_id"],
+            ["deployment_releases.release_id", "deployment_releases.tenant_id", "deployment_releases.org_id"],
+            name="fk_deployment_declaration_release_scope",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["supersedes_deployment_id", "tenant_id", "org_id"],
+            ["deployment_declarations.deployment_id", "deployment_declarations.tenant_id", "deployment_declarations.org_id"],
+            name="fk_deployment_declaration_supersedes_scope",
+            ondelete="RESTRICT",
+        ),
+        Index(
+            "uq_deployment_current_environment_component",
+            "environment_id",
+            "component",
+            unique=True,
+            sqlite_where=text("is_current = 1"),
+            postgresql_where=text("is_current = TRUE"),
+        ),
+    )
+
+
+class DeploymentRuntimeCheckRunModel(Base):
+    __tablename__ = "deployment_runtime_check_runs"
+
+    check_run_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    org_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    deployment_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="unknown", index=True)
+    checks_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="external")
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+    recorded_by_user_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("studio_users.user_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "tenant_id"],
+            ["studio_organizations.org_id", "studio_organizations.tenant_id"],
+            name="fk_deployment_runtime_check_org_scope",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["deployment_id", "tenant_id", "org_id"],
+            ["deployment_declarations.deployment_id", "deployment_declarations.tenant_id", "deployment_declarations.org_id"],
+            name="fk_deployment_runtime_check_scope",
+            ondelete="RESTRICT",
         ),
     )

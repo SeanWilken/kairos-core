@@ -1046,6 +1046,59 @@ def test_context_document_list_and_content_contract() -> None:
     assert b"name,status" in content.content
 
 
+def test_context_documents_reject_cross_org_mutable_scope() -> None:
+    client = TestClient(app)
+    admin_headers = register_and_login(client, email="context.document.scope.admin@myai.dev")
+    org_ids = []
+    for name, slug in (("Document Scope A", "document-scope-a"), ("Document Scope B", "document-scope-b")):
+        response = client.post(
+            "/v1/studio/organizations",
+            headers=admin_headers,
+            json={"name": name, "slug": slug, "mode": "team"},
+        )
+        assert response.status_code == 200
+        org_ids.append(response.json()["data"]["org_id"])
+    org_a_id, org_b_id = org_ids
+
+    org_b_headers = {**admin_headers, "X-Org-ID": org_b_id}
+    upload_b = client.post(
+        "/v1/knowledge/documents/upload",
+        headers=org_b_headers,
+        data={"org_id": org_b_id, "title": "Org B private document"},
+        files={"file": ("private.txt", io.BytesIO(b"org b private content"), "text/plain")},
+    )
+    assert upload_b.status_code == 200
+    document_b_id = upload_b.json()["data"]["entity"]["entity_id"]
+
+    org_a_headers = register_and_login(
+        client,
+        email="context.document.scope.a@myai.dev",
+        org_id=org_a_id,
+        is_global_admin=False,
+    )
+    cross_upload = client.post(
+        "/v1/knowledge/documents/upload",
+        headers=org_a_headers,
+        data={"org_id": org_b_id, "title": "Cross-org upload"},
+        files={"file": ("cross.txt", io.BytesIO(b"must not persist"), "text/plain")},
+    )
+    assert cross_upload.status_code == 403
+    assert cross_upload.json()["error"]["details"]["reason_code"] == "ORG_SCOPE_FORBIDDEN"
+
+    cross_list = client.get(
+        "/v1/knowledge/documents",
+        headers=org_a_headers,
+        params={"org_id": org_b_id},
+    )
+    assert cross_list.status_code == 403
+    assert cross_list.json()["error"]["details"]["reason_code"] == "ORG_SCOPE_FORBIDDEN"
+
+    detail = client.get(f"/v1/knowledge/documents/{document_b_id}", headers=org_a_headers)
+    content = client.get(f"/v1/knowledge/documents/{document_b_id}/content", headers=org_a_headers)
+    assert detail.status_code == 404
+    assert content.status_code == 404
+
+
 def test_context_document_list_filters_and_cursor_contract() -> None:
     client = TestClient(app)
     owner_headers, org_id = _org_headers(

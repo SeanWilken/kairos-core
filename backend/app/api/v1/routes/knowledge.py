@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from app.core.auth_context import require_authentication, require_roles
+from app.core.auth_context import require_authentication, require_org_access
 from app.core.knowledge_index_store import knowledge_index_store
 from app.core.response import ok_response
 
@@ -52,7 +52,12 @@ class KnowledgeEdgeCreatePayload(BaseModel):
 @router.post("/domains")
 def create_knowledge_domain(request: Request, payload: KnowledgeDomainCreatePayload) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
-    require_roles(auth, {"owner", "admin"})
+    require_org_access(
+        auth,
+        org_id=payload.org_id,
+        allowed_roles={"owner", "admin"},
+        require_scoped_context=True,
+    )
     item = knowledge_index_store.create_domain(
         tenant_id=auth.tenant_id,
         org_id=payload.org_id,
@@ -68,6 +73,7 @@ def create_knowledge_domain(request: Request, payload: KnowledgeDomainCreatePayl
 @router.get("/domains")
 def list_knowledge_domains(request: Request, org_id: str = Query(min_length=1)) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
+    require_org_access(auth, org_id=org_id)
     items = knowledge_index_store.list_domains(tenant_id=auth.tenant_id, org_id=org_id)
     return ok_response(request, data={"items": items})
 
@@ -75,7 +81,12 @@ def list_knowledge_domains(request: Request, org_id: str = Query(min_length=1)) 
 @router.post("/nodes")
 def create_knowledge_node(request: Request, payload: KnowledgeNodeCreatePayload) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
-    require_roles(auth, {"owner", "admin"})
+    require_org_access(
+        auth,
+        org_id=payload.org_id,
+        allowed_roles={"owner", "admin"},
+        require_scoped_context=True,
+    )
     item = knowledge_index_store.create_node(
         tenant_id=auth.tenant_id,
         org_id=payload.org_id,
@@ -103,6 +114,7 @@ def list_knowledge_nodes(
     domain_id: str | None = None,
 ) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
+    require_org_access(auth, org_id=org_id)
     items = knowledge_index_store.list_nodes(tenant_id=auth.tenant_id, org_id=org_id, domain_id=domain_id)
     return ok_response(request, data={"items": items})
 
@@ -110,7 +122,12 @@ def list_knowledge_nodes(
 @router.post("/edges")
 def create_knowledge_edge(request: Request, payload: KnowledgeEdgeCreatePayload) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
-    require_roles(auth, {"owner", "admin"})
+    require_org_access(
+        auth,
+        org_id=payload.org_id,
+        allowed_roles={"owner", "admin"},
+        require_scoped_context=True,
+    )
     item = knowledge_index_store.create_edge(
         tenant_id=auth.tenant_id,
         org_id=payload.org_id,
@@ -133,5 +150,6 @@ def list_knowledge_edges(
     node_id: str | None = None,
 ) -> dict[str, Any]:
     auth = require_authentication(request, require_org=True)
+    require_org_access(auth, org_id=org_id)
     items = knowledge_index_store.list_edges(tenant_id=auth.tenant_id, org_id=org_id, node_id=node_id)
     return ok_response(request, data={"items": items})

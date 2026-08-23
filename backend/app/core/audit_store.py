@@ -20,6 +20,7 @@ class AuditStore:
         self,
         *,
         tenant_id: str,
+        org_id: str | None = None,
         actor_type: str,
         actor_id: str,
         action: str,
@@ -37,6 +38,7 @@ class AuditStore:
             row = AuditEventModel(
                 audit_event_id=str(uuid4()),
                 tenant_id=tenant_id,
+                org_id=org_id,
                 actor_type=actor_type,
                 actor_id=actor_id,
                 action=action,
@@ -55,6 +57,7 @@ class AuditStore:
             return {
                 "audit_event_id": row.audit_event_id,
                 "tenant_id": row.tenant_id,
+                "org_id": row.org_id,
                 "action": row.action,
                 "decision": row.decision,
                 "reason_code": row.reason_code,
@@ -65,12 +68,15 @@ class AuditStore:
         self,
         *,
         tenant_id: str,
+        org_id: str | None = None,
         room_id: str | None = None,
         orchestration_run_id: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         with SessionLocal() as db:
             stmt = select(AuditEventModel).where(AuditEventModel.tenant_id == tenant_id)
+            if org_id is not None:
+                stmt = stmt.where(AuditEventModel.org_id == org_id)
             if room_id:
                 stmt = stmt.where(AuditEventModel.room_id == room_id)
             if orchestration_run_id:
@@ -90,6 +96,7 @@ class AuditStore:
                     {
                         "audit_event_id": row.audit_event_id,
                         "tenant_id": row.tenant_id,
+                        "org_id": row.org_id,
                         "actor_type": row.actor_type,
                         "actor_id": row.actor_id,
                         "action": row.action,

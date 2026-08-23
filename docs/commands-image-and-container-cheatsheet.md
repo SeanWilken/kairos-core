@@ -36,21 +36,21 @@ From `kairos-core/`:
 Build all mapped repos:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action build -Repos all -Engine podman
+.\scripts\multi-repo-workflow.ps1 -Action build -Targets all -Engine podman
 ```
 
 Build specific repos:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action build -Repos core-api,core-frontend,studio-frontend -Engine podman
+.\scripts\multi-repo-workflow.ps1 -Action build -Targets core-api,core-frontend,studio-frontend -Engine podman
 ```
 
 Linux/Zorin:
 
 ```bash
 bash ./scripts/multi-repo-workflow.sh --action list
-bash ./scripts/multi-repo-workflow.sh --action build --repos all --engine podman
-bash ./scripts/multi-repo-workflow.sh --action build --repos core-api,core-frontend,studio-frontend --engine podman
+bash ./scripts/multi-repo-workflow.sh --action build --targets all --engine podman
+bash ./scripts/multi-repo-workflow.sh --action build --targets core-api,core-frontend,studio-frontend --engine podman
 ```
 
 ### Core frontend
@@ -101,11 +101,11 @@ From `myai-suite/`:
 Orchestrated from `kairos-core/`:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action deploy -Repos all -Engine podman
+.\scripts\multi-repo-workflow.ps1 -Action deploy -Targets all -Engine podman
 ```
 
 ```bash
-bash ./scripts/multi-repo-workflow.sh --action deploy --repos all --engine podman
+bash ./scripts/multi-repo-workflow.sh --action deploy --targets all --engine podman
 ```
 
 ### Deploy all active stack services
@@ -134,17 +134,17 @@ Behavior:
 Refresh all mapped repos into the suite:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action refresh -Repos all -Engine podman
+.\scripts\multi-repo-workflow.ps1 -Action refresh -Targets all -Engine podman
 ```
 
 ```bash
-bash ./scripts/multi-repo-workflow.sh --action refresh --repos all --engine podman
+bash ./scripts/multi-repo-workflow.sh --action refresh --targets all --engine podman
 ```
 
 Refresh only Studio and Council:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action refresh -Repos studio-frontend,council-frontend -Engine podman
+.\scripts\multi-repo-workflow.ps1 -Action refresh -Targets studio-frontend,council-frontend -Engine podman
 ```
 
 ### Refresh just Studio
@@ -247,13 +247,13 @@ You can also use:
 Publish all mapped repos with a shared release tag:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action publish -Repos all -Engine podman -PublishTag 0.1.0
+.\scripts\multi-repo-workflow.ps1 -Action publish -Targets all -Engine podman -ReleaseTag 0.1.0
 ```
 
 Publish only selected repos:
 
 ```powershell
-.\scripts\multi-repo-workflow.ps1 -Action publish -Repos core-api,core-frontend,studio-frontend -Engine podman -PublishTag 0.1.0
+.\scripts\multi-repo-workflow.ps1 -Action publish -Targets core-api,core-frontend,studio-frontend -Engine podman -ReleaseTag 0.1.0
 ```
 
 ### Log in
@@ -353,9 +353,9 @@ If a repo is not mapped yet, build/publish it manually or extend `scripts/multi-
 ### 6. Preserve vs destroy data
 
 - preserve existing data:
-  - `.\scripts\multi-repo-workflow.ps1 -Action deploy -Repos all -Engine podman`
+  - `.\scripts\multi-repo-workflow.ps1 -Action deploy -Targets all -Engine podman`
 - destroy volumes and reset data:
-  - `.\scripts\multi-repo-workflow.ps1 -Action reset-data -Repos all -Engine podman`
+  - `.\scripts\multi-repo-workflow.ps1 -Action reset-data -Targets all -Engine podman`
 
 The reset-data action removes named volumes for the selected profile set before redeploying.
 

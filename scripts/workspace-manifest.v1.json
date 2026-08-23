@@ -1,0 +1,140 @@
+{
+  "$schema": "./workspace-manifest.schema.json",
+  "schemaVersion": "1.0",
+  "workspaceRoot": "../..",
+  "suite": {
+    "profileOrder": ["core", "suite", "de", "knowledger"]
+  },
+  "repositories": [
+    {
+      "id": "core",
+      "label": "MyAI Core",
+      "path": "kairos-core",
+      "remoteName": "myai-tech",
+      "remoteUrl": "https://github.com/myAI-Tech/core.git",
+      "branch": "master"
+    },
+    {
+      "id": "studio",
+      "label": "MyAI Studio",
+      "path": "kairos-studio",
+      "remoteName": "myai-tech",
+      "remoteUrl": "https://github.com/myAI-Tech/studio.git",
+      "branch": "master"
+    },
+    {
+      "id": "council",
+      "label": "MyAI Council",
+      "path": "kairos-council",
+      "remoteName": "myai-tech",
+      "remoteUrl": "https://github.com/myAI-Tech/council.git",
+      "branch": "master"
+    },
+    {
+      "id": "aide",
+      "label": "MyAIDE",
+      "path": "MyAIDE",
+      "remoteName": "myai-tech",
+      "remoteUrl": "https://github.com/myAI-Tech/aide.git",
+      "branch": "master"
+    },
+    {
+      "id": "knowledger",
+      "label": "MyAI KnowLedger",
+      "path": "MyAI-KnowLedger",
+      "remoteName": "myai-tech",
+      "remoteUrl": "https://github.com/myAI-Tech/knowledger.git",
+      "branch": "master"
+    }
+  ],
+  "components": [
+    {
+      "id": "core-api",
+      "label": "Core API",
+      "repository": "core",
+      "path": "backend",
+      "context": "backend",
+      "dockerfile": "backend/Dockerfile",
+      "image": "myaitech/core-api",
+      "imageVariable": "CORE_API_IMAGE",
+      "profile": "core"
+    },
+    {
+      "id": "core-frontend",
+      "label": "Core Frontend",
+      "repository": "core",
+      "path": "frontend",
+      "context": "frontend",
+      "dockerfile": "frontend/Dockerfile",
+      "image": "myaitech/core-frontend",
+      "imageVariable": "CORE_FRONTEND_IMAGE",
+      "profile": "core"
+    },
+    {
+      "id": "studio-frontend",
+      "label": "Studio Frontend",
+      "repository": "studio",
+      "path": ".",
+      "context": ".",
+      "dockerfile": "Dockerfile",
+      "image": "myaitech/studio",
+      "imageVariable": "STUDIO_FRONTEND_IMAGE",
+      "profile": "suite"
+    },
+    {
+      "id": "council-frontend",
+      "label": "Council Frontend",
+      "repository": "council",
+      "path": ".",
+      "context": ".",
+      "dockerfile": "Dockerfile",
+      "image": "myaitech/council",
+      "imageVariable": "COUNCIL_FRONTEND_IMAGE",
+      "profile": "suite"
+    },
+    {
+      "id": "aide-api",
+      "label": "MyAIDE API",
+      "repository": "aide",
+      "path": "src/MyAIDE.Api",
+      "context": ".",
+      "dockerfile": "src/MyAIDE.Api/Dockerfile",
+      "image": "myaitech/aide-api",
+      "imageVariable": "MYAI_DE_API_IMAGE",
+      "profile": "de"
+    },
+    {
+      "id": "aide-frontend",
+      "label": "MyAIDE Frontend",
+      "repository": "aide",
+      "path": "src/MyAIDE.Web",
+      "context": ".",
+      "dockerfile": "src/MyAIDE.Web/Dockerfile",
+      "image": "myaitech/aide-frontend",
+      "imageVariable": "MYAI_DE_FRONTEND_IMAGE",
+      "profile": "de"
+    },
+    {
+      "id": "knowledger-frontend",
+      "label": "KnowLedger Frontend",
+      "repository": "knowledger",
+      "path": ".",
+      "context": ".",
+      "dockerfile": "Dockerfile",
+      "image": "myaitech/knowledger",
+      "imageVariable": "MYAI_KNOWLEDGER_FRONTEND_IMAGE",
+      "profile": "knowledger"
+    }
+  ],
+  "pipelines": {
+    "development-redeploy": [
+      {"action": "sync", "targets": ["studio", "council", "aide", "knowledger"]},
+      {"action": "build", "targets": "all"},
+      {"action": "refresh", "targets": "all"},
+      {"action": "deploy", "targets": "all"}
+    ],
+    "images-redeploy": [
+      {"action": "refresh", "targets": "all", "configuredImages": true}
+    ]
+  }
+}

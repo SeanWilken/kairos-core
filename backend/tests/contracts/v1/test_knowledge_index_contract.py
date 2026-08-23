@@ -15,6 +15,7 @@ def test_knowledge_index_domain_node_edge_contract() -> None:
     )
     assert org.status_code == 200
     org_id = org.json()["data"]["org_id"]
+    headers["X-Org-ID"] = org_id
 
     domain = client.post(
         "/v1/knowledge/domains",
@@ -90,3 +91,70 @@ def test_knowledge_index_domain_node_edge_contract() -> None:
     list_edges = client.get(f"/v1/knowledge/edges?org_id={org_id}&node_id={node_b_id}", headers=headers)
     assert list_edges.status_code == 200
     assert len(list_edges.json()["data"]["items"]) == 1
+
+
+def test_knowledge_index_rejects_cross_org_mutable_scope() -> None:
+    client = TestClient(app)
+    admin_headers = register_and_login(client, email="knowledge.scope.admin@myai.dev")
+
+    org_ids = []
+    for name, slug in (("Knowledge Scope A", "knowledge-scope-a"), ("Knowledge Scope B", "knowledge-scope-b")):
+        response = client.post(
+            "/v1/studio/organizations",
+            headers=admin_headers,
+            json={"name": name, "slug": slug, "mode": "team"},
+        )
+        assert response.status_code == 200
+        org_ids.append(response.json()["data"]["org_id"])
+    org_a_id, org_b_id = org_ids
+
+    unscoped_global_write = client.post(
+        "/v1/knowledge/nodes",
+        headers=admin_headers,
+        json={"org_id": org_b_id, "node_type": "document", "title": "Unscoped global write"},
+    )
+    assert unscoped_global_write.status_code == 403
+    assert unscoped_global_write.json()["error"]["details"]["reason_code"] == "ORG_SCOPE_FORBIDDEN"
+
+    org_b_headers = {**admin_headers, "X-Org-ID": org_b_id}
+    node_b = client.post(
+        "/v1/knowledge/nodes",
+        headers=org_b_headers,
+        json={"org_id": org_b_id, "node_type": "document", "title": "Org B private node"},
+    )
+    assert node_b.status_code == 200
+
+    org_a_headers = register_and_login(
+        client,
+        email="knowledge.scope.a@myai.dev",
+        org_id=org_a_id,
+        is_global_admin=False,
+    )
+    write_node = client.post(
+        "/v1/knowledge/nodes",
+        headers=org_a_headers,
+        json={"org_id": org_b_id, "node_type": "document", "title": "Cross-org node"},
+    )
+    assert write_node.status_code == 403
+    assert write_node.json()["error"]["details"]["reason_code"] == "ORG_SCOPE_FORBIDDEN"
+
+    write_edge = client.post(
+        "/v1/knowledge/edges",
+        headers=org_a_headers,
+        json={
+            "org_id": org_b_id,
+            "from_node_id": node_b.json()["data"]["node_id"],
+            "to_node_id": node_b.json()["data"]["node_id"],
+            "relationship_type": "related_to",
+        },
+    )
+    assert write_edge.status_code == 403
+
+    for resource in ("domains", "nodes", "edges"):
+        response = client.get(
+            f"/v1/knowledge/{resource}",
+            headers=org_a_headers,
+            params={"org_id": org_b_id},
+        )
+        assert response.status_code == 403
+        assert response.json()["error"]["details"]["reason_code"] == "ORG_SCOPE_FORBIDDEN"
